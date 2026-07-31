@@ -337,9 +337,24 @@ thêm `150.000 đồng`. Giữ nguyên hành vi này để khớp bản gốc.
 ```json
 [ { "id":"1", "eff_date":"2000-01-01", "buy_fee":"0.15000", "sell_fee":"0.15000", "tax":"0.10000" } ]
 ```
-Sort `eff_date` tăng. Nếu user chưa có bản ghi nào → seed 1 dòng lúc activate
-với `eff_date 2000-01-01`, `0.15 / 0.15 / 0.10` (hằng số `BUY_FEE/SELL_FEE/TAX`
-dòng **825**).
+Sort `eff_date` tăng.
+
+**Mốc gốc phải được GHIM thành dữ liệu, không đọc từ hằng số.** Dùng **lazy seed**:
+lần đầu user ghi bản ghi (`POST fin/stock-txns` hoặc `POST fin/rates`), nếu
+`fin_rates` của user còn rỗng thì `INSERT IGNORE` một dòng
+`2000-01-01 / 0.15 / 0.15 / 0.10` (hằng số `BUY_FEE/SELL_FEE/TAX` gốc dòng **825**).
+`INSERT IGNORE` dựa vào `UNIQUE uq_user_eff` nên hai request đồng thời không lỗi
+trùng khoá.
+
+> **Vì sao không đọc từ hằng số trong code.** Nếu biểu phí gốc chỉ tồn tại dưới
+> dạng hằng số PHP thì một lần sửa hằng số đó sẽ **tính lại toàn bộ lãi/lỗ lịch
+> sử** theo giá trị mới. Số liệu tài chính đã chốt không được phép đổi vì một lần
+> sửa code — nên mốc phí phải là dữ liệu được ghim tại thời điểm phát sinh giao
+> dịch.
+
+Hằng số trong code chỉ còn hai vai: giá trị khởi tạo cho lazy seed, và **fallback
+chỉ khi chưa kịp seed** (user có giao dịch nhưng `fin_rates` rỗng — xảy ra khi dữ
+liệu được chèn trực tiếp vào DB không qua API). Đường chính luôn là mốc đã ghim.
 
 ### `POST fin/rates`
 ```json
