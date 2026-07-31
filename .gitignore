@@ -1,0 +1,9 @@
+.env
+*.env.local
+*.pem
+*.key
+node_modules/
+.DS_Store
+backend/assets/dist/
+infra/docker/dbdata/
+backup/

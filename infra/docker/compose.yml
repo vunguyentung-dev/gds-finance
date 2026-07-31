@@ -1,0 +1,24 @@
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: devroot
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wp
+      MARIADB_PASSWORD: devpass
+    volumes: ["dbdata:/var/lib/mysql"]
+
+  wp:
+    image: wordpress:6.8-php8.3-apache
+    depends_on: [db]
+    ports: ["8080:80"]
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: devpass
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DEBUG: 1
+    volumes:
+      - ../../backend:/var/www/html/wp-content/plugins/gds-finance
+
+volumes: { dbdata: }
