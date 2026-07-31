@@ -28,6 +28,13 @@ export const nav: NavItem[] = [
   { id: 'settings', label: 'Cài đặt' },
 ];
 
+/** Danh sách id màn hợp lệ — suy ra từ `nav` để không phải khai báo lại. */
+export const screenIds: readonly Screen[] = nav.map((item) => item.id);
+
+export function isScreen(value: string): value is Screen {
+  return (screenIds as readonly string[]).includes(value);
+}
+
 export interface ScreenTitle {
   crumb: string;
   title: string;
