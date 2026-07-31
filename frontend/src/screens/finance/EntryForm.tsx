@@ -1,4 +1,5 @@
 import type { EntryType, FinCategories } from '../../api/finance';
+import { describeDong, parseVNNumber } from '../../lib/format';
 
 export interface DraftState {
   type: EntryType;
@@ -30,6 +31,8 @@ export function EntryForm({
   onSubmit,
 }: EntryFormProps) {
   const catOptions = categories[draft.type];
+  // Diễn giải số vừa gõ để soát số 0 — ô này nhập theo ĐỒNG đầy đủ
+  const amountHint = describeDong(parseVNNumber(draft.amount));
 
   return (
     <div className="gf-fin-panel">
@@ -63,15 +66,16 @@ export function EntryForm({
             onChange={(e) => onFieldChange('date', e.target.value)}
           />
         </div>
-        <div>
-          <label className="gf-fin-form-label">Số tiền (nghìn ₫)</label>
+        <div className="gf-fin-amount-cell">
+          <label className="gf-fin-form-label">Số tiền (₫)</label>
           <input
             type="text"
             className="gf-fin-input gf-num"
-            placeholder="5.000"
+            placeholder="5.000.000"
             value={draft.amount}
             onChange={(e) => onFieldChange('amount', e.target.value)}
           />
+          {amountHint && <div className="gf-fin-amount-hint">{amountHint}</div>}
         </div>
         <div>
           <label className="gf-fin-form-label">Ghi chú</label>

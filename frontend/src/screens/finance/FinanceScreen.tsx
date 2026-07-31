@@ -117,7 +117,8 @@ export function FinanceScreen() {
   };
 
   const handleSubmit = async () => {
-    const amountDong = parseVNNumber(draft.amount) * 1000;
+    // Ô nhập theo ĐỒNG đầy đủ — gửi thẳng, không quy đổi. DB cũng lưu theo đồng.
+    const amountDong = parseVNNumber(draft.amount);
     if (!amountDong || !draft.date || !draft.cat) return;
     setSubmitting(true);
     setFormError('');

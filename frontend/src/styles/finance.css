@@ -189,6 +189,8 @@
   gap: 10px;
   align-items: end;
   margin-top: 14px;
+  /* chỗ cho .gf-fin-amount-hint đặt absolute bên dưới ô Số tiền */
+  padding-bottom: 18px;
 }
 
 .gf-fin-form-label {
@@ -242,6 +244,26 @@
   font-size: 14px;
   background: var(--bg);
   color: var(--fg);
+}
+
+/*
+ * Diễn giải số tiền vừa gõ, chống nhầm số 0.
+ * Đặt absolute vì grid form dùng align-items:end — nếu để trong luồng thì ô Số
+ * tiền sẽ cao hơn các ô khác và cả hàng bị lệch.
+ */
+.gf-fin-amount-cell {
+  position: relative;
+}
+
+.gf-fin-amount-hint {
+  position: absolute;
+  top: 100%;
+  left: 2px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accentInk);
+  white-space: nowrap;
 }
 
 .gf-fin-submit {
