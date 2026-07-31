@@ -97,11 +97,50 @@ class GDSFIN_Stock {
 
     /* ===================== BIỂU PHÍ ===================== */
 
-    /** Mặc định khi user chưa có mốc nào: hằng số BUY_FEE/SELL_FEE/TAX gốc (dòng 825). */
+    /**
+     * Mốc phí gốc — hằng số BUY_FEE/SELL_FEE/TAX của prototype (dòng 825).
+     * Chỉ dùng làm GIÁ TRỊ KHỞI TẠO cho lazy seed, không dùng để tính toán lâu dài.
+     */
+    const SEED_EFF_DATE = '2000-01-01';
+    const SEED_BUY_FEE  = '0.15000';
+    const SEED_SELL_FEE = '0.15000';
+    const SEED_TAX      = '0.10000';
+
+    /**
+     * GHIM mốc phí gốc vào DB ngay khi user ghi bản ghi đầu tiên (lazy seed).
+     *
+     * Lý do phải ghim thành DỮ LIỆU thay vì đọc từ hằng số: nếu sau này sửa hằng
+     * số trong code thì toàn bộ lãi/lỗ LỊCH SỬ sẽ được tính lại theo giá trị mới.
+     * Số liệu tài chính đã chốt không được phép đổi vì một lần sửa code.
+     *
+     * INSERT IGNORE dựa vào UNIQUE uq_user_eff nên hai request đồng thời cùng
+     * seed cũng không lỗi trùng khoá.
+     */
+    private static function ensure_rate_seeded(int $uid): void {
+        global $wpdb;
+        $t = self::t_rate();
+        $has = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $t WHERE user_id = %d", $uid
+        ));
+        if ($has > 0) return;
+
+        $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO $t (user_id, eff_date, buy_fee, sell_fee, tax, created_at)
+             VALUES (%d, %s, %s, %s, %s, %s)",
+            $uid, self::SEED_EFF_DATE, self::SEED_BUY_FEE, self::SEED_SELL_FEE, self::SEED_TAX,
+            current_time('mysql')
+        ));
+    }
+
+    /**
+     * FALLBACK CHỈ khi chưa kịp seed (user có giao dịch nhưng bảng rates còn rỗng —
+     * ví dụ dữ liệu chèn trực tiếp vào DB không qua API). Đường chính là mốc đã
+     * ghim trong fin_rates, xem ensure_rate_seeded().
+     */
     private static function default_rates(): array {
         return [[
-            'id' => null, 'eff_date' => '2000-01-01',
-            'buy_fee' => '0.15000', 'sell_fee' => '0.15000', 'tax' => '0.10000',
+            'id' => null, 'eff_date' => self::SEED_EFF_DATE,
+            'buy_fee' => self::SEED_BUY_FEE, 'sell_fee' => self::SEED_SELL_FEE, 'tax' => self::SEED_TAX,
         ]];
     }
 
@@ -155,6 +194,10 @@ class GDSFIN_Stock {
                 return new WP_Error('bad_rate', "$k không hợp lệ", ['status' => 400]);
             }
         }
+
+        // Ghim mốc gốc trước, để mốc mới của user không trở thành mốc sớm nhất và
+        // vô tình áp cho cả các giao dịch có ngày nhỏ hơn nó (rate_for lấy rates[0]).
+        self::ensure_rate_seeded($uid);
 
         $t      = self::t_rate();
         $exists = (int) $wpdb->get_var($wpdb->prepare(
@@ -216,6 +259,10 @@ class GDSFIN_Stock {
         if (!is_numeric($price) || bccomp($price, '0', self::S) <= 0) {
             return new WP_Error('bad_price', 'price (đồng/cp) phải > 0', ['status' => 400]);
         }
+
+        // Ghim mốc phí gốc TRƯỚC khi có giao dịch đầu tiên, để lãi/lỗ của giao dịch
+        // này về sau không bị tính lại nếu hằng số trong code thay đổi.
+        self::ensure_rate_seeded($uid);
 
         $wpdb->insert(self::t_txn(), [
             'user_id'    => $uid,
