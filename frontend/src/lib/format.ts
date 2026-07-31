@@ -20,6 +20,22 @@ export function formatSignedTrieu(dong: number, type: 'in' | 'out', decimals = 2
   return `${sign}${formatVN(Math.abs(dong) / 1e6, decimals)} tr`;
 }
 
+/** Giá cổ phiếu: DB lưu đồng/cp, UI hiển thị theo nghìn ₫ (98500 -> "98,5"). */
+export function toNghin(dong: number, decimals = 1): string {
+  return formatVN(dong / 1000, decimals);
+}
+
+/** Số triệu có dấu + khi dương (âm đã có dấu − từ formatVN). */
+export function signedTrieu(dong: number, decimals = 2): string {
+  const prefix = dong >= 0 ? '+' : '';
+  return `${prefix}${toTrieu(dong, decimals)}`;
+}
+
+/** Khối lượng cổ phiếu: nhóm nghìn, không thập phân. */
+export function toQty(qty: number): string {
+  return formatVN(qty, 0);
+}
+
 export function parseVNNumber(input: string): number {
   const cleaned = input.replace(/\./g, '').replace(',', '.');
   const n = parseFloat(cleaned);

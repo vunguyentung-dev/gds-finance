@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ScreenPlaceholder } from './ScreenPlaceholder';
 import { FinanceScreen } from '../screens/finance/FinanceScreen';
+import { TradeScreen } from '../screens/trade/TradeScreen';
 import { titles, type Screen } from '../lib/nav';
 import { themeVars, type ThemeName } from '../lib/theme';
 
@@ -23,7 +24,13 @@ export function AppShell({ screen, theme, onNavigate, onToggleTheme }: AppShellP
       <main className="gf-main">
         <Topbar screenTitle={screenTitle} theme={theme} onToggleTheme={onToggleTheme} />
         <div className="gf-content">
-          {screen === 'finance' ? <FinanceScreen /> : <ScreenPlaceholder />}
+          {screen === 'finance' ? (
+            <FinanceScreen />
+          ) : screen === 'trade' ? (
+            <TradeScreen />
+          ) : (
+            <ScreenPlaceholder />
+          )}
         </div>
       </main>
     </div>
