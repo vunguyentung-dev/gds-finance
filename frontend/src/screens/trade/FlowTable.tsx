@@ -1,5 +1,5 @@
 import type { FlowRow, SummaryFooter } from '../../api/stock';
-import { formatDateVN, signedTrieu, toNghin, toQty, toTrieu } from '../../lib/format';
+import { formatDateVN, signedDong, toDong, toQty } from '../../lib/format';
 
 interface Props {
   rows: FlowRow[];
@@ -67,19 +67,19 @@ export function FlowTable({ rows, footer }: Props) {
                       <span className={`gf-trade-badge ${isBuy ? 'buy' : 'sell'}`}>{isBuy ? 'MUA' : 'BÁN'}</span>
                     </td>
                     <td className="muted">{toQty(Number(r.qty))}</td>
-                    <td>{toNghin(Number(r.price), 1)}</td>
+                    <td>{toDong(Number(r.price))}</td>
                     <td className="l gf-trade-t2" style={{ color: t2.color, fontFamily: 'Manrope' }}>
                       {t2.text}
                     </td>
-                    <td style={{ color: cash >= 0 ? 'var(--up)' : 'var(--fg)' }}>{signedTrieu(cash, 2)}</td>
+                    <td style={{ color: cash >= 0 ? 'var(--up)' : 'var(--fg)' }}>{signedDong(cash)}</td>
                     <td
                       className="strong"
                       style={{ color: rowPl === null ? 'var(--muted2)' : rowPl >= 0 ? 'var(--up)' : 'var(--down)' }}
                     >
-                      {rowPl === null ? '—' : signedTrieu(rowPl, 2)}
+                      {rowPl === null ? '—' : signedDong(rowPl)}
                     </td>
                     <td className="bold" style={{ color: cum >= 0 ? 'var(--up)' : 'var(--down)' }}>
-                      {signedTrieu(cum, 2)}
+                      {signedDong(cum)}
                     </td>
                     <td className="muted">{toQty(Number(r.remain))} cp</td>
                   </tr>
@@ -95,7 +95,7 @@ export function FlowTable({ rows, footer }: Props) {
                 : `Còn nắm ${toQty(remain)} cp — lãi/lỗ đã chốt`}
             </div>
             <div className="gf-trade-foot-num gf-num" style={{ color: cumPl >= 0 ? 'var(--up)' : 'var(--down)' }}>
-              {signedTrieu(cumPl, 2)}
+              {signedDong(cumPl)}
             </div>
           </div>
 
@@ -103,9 +103,9 @@ export function FlowTable({ rows, footer }: Props) {
             <div className="gf-trade-diverge">
               <span>⚠</span>
               <div>
-                <b>Hai cách tính đang lệch nhau {toTrieu(Math.abs(diff), 2)}.</b> Số ở chân bảng này (
-                {signedTrieu(cumPl, 2)}) khớp lô theo <b>FIFO</b>, còn thẻ “Tổng lãi/lỗ đã thực hiện” đầu màn (
-                {signedTrieu(Number(footer.total_realized), 2)}) dùng <b>giá vốn bình quân</b>. Chênh lệch phát sinh
+                <b>Hai cách tính đang lệch nhau {toDong(Math.abs(diff))}.</b> Số ở chân bảng này (
+                {signedDong(cumPl)}) khớp lô theo <b>FIFO</b>, còn thẻ “Tổng lãi/lỗ đã thực hiện” đầu màn (
+                {signedDong(Number(footer.total_realized))}) dùng <b>giá vốn bình quân</b>. Chênh lệch phát sinh
                 khi có nhiều lô mua khác giá hoặc lệnh bán vượt số hàng đã về.
               </div>
             </div>

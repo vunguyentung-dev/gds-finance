@@ -47,8 +47,10 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 ## ĐƠN VỊ TIỀN — nguồn sai sót lớn nhất
 - DB lưu theo ĐỒNG: thu/chi (45000000), giá cổ phiếu theo đồng/cp
 - API truyền `amount` dạng CHUỖI để không mất chính xác số lớn
-- UI quy đổi khi hiển thị: chia 1e6 ra "tr"; định dạng VN (. nghìn, , thập phân, − âm)
-- Form nhập theo NGHÌN ₫ (gõ 5.000 = 5 triệu), nhân 1000 trước khi gửi API
+- Mọi ô nhập tiền theo ĐỒNG đầy đủ. KHÔNG nhân/chia 1000 ở bất kỳ đâu.
+  Giá cổ phiếu nhập theo đồng/cp (98500, không phải 98,5).
+  Hiển thị cũng theo đồng đầy đủ, không quy đổi ra "tr".
+- Định dạng VN khi hiển thị (. ngăn nghìn, , thập phân, − âm)
 - Không cộng dồn tiền bằng float ở client; ưu tiên dùng số đã tính sẵn từ endpoint summary
 
 ## Ràng buộc kỹ thuật

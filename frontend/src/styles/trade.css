@@ -99,9 +99,31 @@
 
 .gf-trade-form {
   display: grid;
-  grid-template-columns: 1fr 1.3fr 1.1fr 0.9fr 1fr auto;
+  grid-template-columns: 1fr 1.3fr 1.1fr 0.9fr 1.1fr auto;
   gap: 10px;
   align-items: end;
+  /* chỗ cho .gf-trade-price-hint đặt absolute bên dưới ô Giá */
+  padding-bottom: 18px;
+}
+
+/*
+ * Diễn giải giá vừa gõ, chống nhầm số 0.
+ * Absolute vì grid dùng align-items:end — để trong luồng thì ô Giá cao hơn các
+ * ô khác và cả hàng bị lệch.
+ */
+.gf-trade-price-cell {
+  position: relative;
+}
+
+.gf-trade-price-hint {
+  position: absolute;
+  top: 100%;
+  left: 2px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accentInk);
+  white-space: nowrap;
 }
 
 .gf-trade-label {

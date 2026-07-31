@@ -1,5 +1,5 @@
 import type { SummaryCards as Cards } from '../../api/stock';
-import { formatVN, signedTrieu, toTrieu } from '../../lib/format';
+import { formatVN, signedDong, toDong } from '../../lib/format';
 
 /**
  * Màu số lãi/lỗ trên thẻ hero: vàng khi hòa vốn, xanh khi lãi, đỏ khi lỗ.
@@ -23,7 +23,7 @@ export function SummaryCards({ cards }: Props) {
       <div className="gf-trade-card gf-trade-hero">
         <div className="gf-trade-card-label">Tổng lãi/lỗ đã thực hiện</div>
         <div className="gf-trade-hero-num gf-num" style={{ color: realizedColor(realized) }}>
-          {signedTrieu(realized, 1)}
+          {signedDong(realized)}
           {pct !== null && (
             <span className="gf-trade-hero-pct">
               {' '}
@@ -35,11 +35,11 @@ export function SummaryCards({ cards }: Props) {
         <div className="gf-trade-hero-foot">
           <div className="gf-trade-hero-row gf-num">
             <span>Tổng mua ròng</span>
-            <b>{toTrieu(Number(cards.total_net_buy), 1)}</b>
+            <b>{toDong(Number(cards.total_net_buy))}</b>
           </div>
           <div className="gf-trade-hero-row gf-num">
             <span>Tổng bán ròng</span>
-            <b>{toTrieu(Number(cards.total_net_sell), 1)}</b>
+            <b>{toDong(Number(cards.total_net_sell))}</b>
           </div>
         </div>
       </div>
@@ -51,7 +51,7 @@ export function SummaryCards({ cards }: Props) {
 
       <div className="gf-trade-card">
         <div className="gf-trade-card-label">Tổng phí + thuế</div>
-        <div className="gf-trade-card-num gf-num">{toTrieu(Number(cards.total_fees), 2)}</div>
+        <div className="gf-trade-card-num gf-num">{toDong(Number(cards.total_fees))}</div>
       </div>
     </div>
   );

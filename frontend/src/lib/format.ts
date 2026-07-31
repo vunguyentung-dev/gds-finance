@@ -6,29 +6,24 @@ export function formatVN(value: number, decimals = 1): string {
   return fracPart ? `${sign}${grouped},${fracPart}` : `${sign}${grouped}`;
 }
 
-export function toTrieu(dong: number, decimals = 1): string {
-  return `${formatVN(dong / 1e6, decimals)} tr`;
+/**
+ * Tiền: hiển thị ĐỒNG đầy đủ, không quy đổi ra "tr". Làm tròn về đồng vì đồng
+ * là đơn vị nhỏ nhất — giá trị gốc trong DB vẫn giữ nguyên 4 chữ số thập phân.
+ */
+export function toDong(dong: number): string {
+  return formatVN(dong, 0);
 }
 
-export function formatNetTrieu(dong: number, decimals = 1): string {
+/** Tiền có dấu + khi dương (âm đã có dấu − từ formatVN): "+12.410.900". */
+export function signedDong(dong: number): string {
   const prefix = dong >= 0 ? '+' : '';
-  return `${prefix}${toTrieu(dong, decimals)}`;
+  return `${prefix}${formatVN(dong, 0)}`;
 }
 
-export function formatSignedTrieu(dong: number, type: 'in' | 'out', decimals = 2): string {
+/** Thu/chi: dấu theo loại khoản, không theo dấu của số. */
+export function typedDong(dong: number, type: 'in' | 'out'): string {
   const sign = type === 'in' ? '+' : '−';
-  return `${sign}${formatVN(Math.abs(dong) / 1e6, decimals)} tr`;
-}
-
-/** Giá cổ phiếu: DB lưu đồng/cp, UI hiển thị theo nghìn ₫ (98500 -> "98,5"). */
-export function toNghin(dong: number, decimals = 1): string {
-  return formatVN(dong / 1000, decimals);
-}
-
-/** Số triệu có dấu + khi dương (âm đã có dấu − từ formatVN). */
-export function signedTrieu(dong: number, decimals = 2): string {
-  const prefix = dong >= 0 ? '+' : '';
-  return `${prefix}${toTrieu(dong, decimals)}`;
+  return `${sign}${formatVN(Math.abs(dong), 0)}`;
 }
 
 /** Khối lượng cổ phiếu: nhóm nghìn, không thập phân. */

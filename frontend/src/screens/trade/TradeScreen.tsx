@@ -101,8 +101,8 @@ export function TradeScreen() {
   const handleSubmit = async () => {
     const sym = draft.sym.trim().toUpperCase();
     const qty = parseVNNumber(draft.qty);
-    // Form nhập theo NGHÌN ₫ -> nhân 1000 để ra đồng/cp trước khi gửi
-    const priceDong = parseVNNumber(draft.price) * 1000;
+    // Ô nhập theo ĐỒNG/cp — gửi thẳng, không quy đổi. DB cũng lưu theo đồng/cp.
+    const priceDong = parseVNNumber(draft.price);
 
     if (!sym || !qty || !priceDong || !draft.date) {
       setFormError('Cần nhập đủ mã CP, ngày, khối lượng và giá.');

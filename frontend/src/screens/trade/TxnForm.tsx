@@ -1,5 +1,5 @@
 import type { RateTier, TxnType } from '../../api/stock';
-import { formatVN } from '../../lib/format';
+import { describeDong, formatVN, parseVNNumber } from '../../lib/format';
 
 export interface TxnDraft {
   sym: string;
@@ -31,6 +31,8 @@ export function TxnForm({
   onFieldChange,
   onSubmit,
 }: Props) {
+  // Diễn giải giá vừa gõ để soát số 0 — ô này nhập theo ĐỒNG/cp
+  const priceHint = describeDong(parseVNNumber(draft.price));
   const feeNote = currentRate
     ? `Phí mua/bán ${formatVN(Number(currentRate.buy_fee), 2)}% · thuế bán ${formatVN(Number(currentRate.tax), 2)}% (hiện hành).`
     : '';
@@ -39,7 +41,7 @@ export function TxnForm({
     <div className="gf-trade-panel">
       <div className="gf-trade-panel-title">Nhập giao dịch mới</div>
       <div className="gf-trade-panel-sub">
-        Giá tính bằng nghìn ₫. {feeNote} Lãi/lỗ tính theo giá vốn bình quân, áp dụng biểu phí theo ngày giao dịch.
+        Giá tính bằng đồng/cổ phiếu. {feeNote} Lãi/lỗ tính theo giá vốn bình quân, áp dụng biểu phí theo ngày giao dịch.
       </div>
 
       <div className="gf-trade-form">
@@ -95,15 +97,16 @@ export function TxnForm({
           />
         </div>
 
-        <div>
-          <label className="gf-trade-label">Giá {draft.side === 'buy' ? 'mua' : 'bán'}</label>
+        <div className="gf-trade-price-cell">
+          <label className="gf-trade-label">Giá {draft.side === 'buy' ? 'mua' : 'bán'} (₫/cp)</label>
           <input
             type="text"
             className="gf-trade-input gf-num"
-            placeholder="98,5"
+            placeholder="98.500"
             value={draft.price}
             onChange={(e) => onFieldChange('price', e.target.value)}
           />
+          {priceHint && <div className="gf-trade-price-hint">{priceHint}</div>}
         </div>
 
         <button type="button" className="gf-trade-submit" onClick={onSubmit} disabled={submitting}>
