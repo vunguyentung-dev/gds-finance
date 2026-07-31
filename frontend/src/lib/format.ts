@@ -6,34 +6,49 @@ export function formatVN(value: number, decimals = 1): string {
   return fracPart ? `${sign}${grouped},${fracPart}` : `${sign}${grouped}`;
 }
 
-export function toTrieu(dong: number, decimals = 1): string {
-  return `${formatVN(dong / 1e6, decimals)} tr`;
+/**
+ * Tiền: hiển thị ĐỒNG đầy đủ, không quy đổi ra "tr". Làm tròn về đồng vì đồng
+ * là đơn vị nhỏ nhất — giá trị gốc trong DB vẫn giữ nguyên 4 chữ số thập phân.
+ */
+export function toDong(dong: number): string {
+  return formatVN(dong, 0);
 }
 
-export function formatNetTrieu(dong: number, decimals = 1): string {
+/** Tiền có dấu + khi dương (âm đã có dấu − từ formatVN): "+12.410.900". */
+export function signedDong(dong: number): string {
   const prefix = dong >= 0 ? '+' : '';
-  return `${prefix}${toTrieu(dong, decimals)}`;
+  return `${prefix}${formatVN(dong, 0)}`;
 }
 
-export function formatSignedTrieu(dong: number, type: 'in' | 'out', decimals = 2): string {
+/** Thu/chi: dấu theo loại khoản, không theo dấu của số. */
+export function typedDong(dong: number, type: 'in' | 'out'): string {
   const sign = type === 'in' ? '+' : '−';
-  return `${sign}${formatVN(Math.abs(dong) / 1e6, decimals)} tr`;
-}
-
-/** Giá cổ phiếu: DB lưu đồng/cp, UI hiển thị theo nghìn ₫ (98500 -> "98,5"). */
-export function toNghin(dong: number, decimals = 1): string {
-  return formatVN(dong / 1000, decimals);
-}
-
-/** Số triệu có dấu + khi dương (âm đã có dấu − từ formatVN). */
-export function signedTrieu(dong: number, decimals = 2): string {
-  const prefix = dong >= 0 ? '+' : '';
-  return `${prefix}${toTrieu(dong, decimals)}`;
+  return `${sign}${formatVN(Math.abs(dong), 0)}`;
 }
 
 /** Khối lượng cổ phiếu: nhóm nghìn, không thập phân. */
 export function toQty(qty: number): string {
   return formatVN(qty, 0);
+}
+
+/** Bỏ số 0 vô nghĩa ở cuối phần thập phân: "5,00" -> "5", "1,50" -> "1,5". */
+function trimDecimalZeros(s: string): string {
+  return s.includes(',') ? s.replace(/,?0+$/, '') : s;
+}
+
+/**
+ * Diễn giải số tiền (ĐỒNG) thành chữ để người dùng soát số 0 khi nhập:
+ * 5000000 -> "5 triệu đồng", 1500000 -> "1,5 triệu đồng", 50000000000 -> "50 tỷ đồng".
+ * Trả chuỗi rỗng khi chưa có gì để diễn giải.
+ */
+export function describeDong(dong: number): string {
+  if (!Number.isFinite(dong) || dong <= 0) return '';
+  const scaled = (v: number, label: string) => `${trimDecimalZeros(formatVN(v, 2))} ${label}`;
+  if (dong >= 1e12) return scaled(dong / 1e12, 'nghìn tỷ đồng');
+  if (dong >= 1e9) return scaled(dong / 1e9, 'tỷ đồng');
+  if (dong >= 1e6) return scaled(dong / 1e6, 'triệu đồng');
+  if (dong >= 1e3) return scaled(dong / 1e3, 'nghìn đồng');
+  return `${formatVN(dong, 0)} đồng`;
 }
 
 export function parseVNNumber(input: string): number {

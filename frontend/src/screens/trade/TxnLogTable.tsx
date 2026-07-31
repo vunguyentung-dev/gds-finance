@@ -1,5 +1,5 @@
 import type { StockTxn } from '../../api/stock';
-import { formatDateVN, toNghin, toQty, toTrieu } from '../../lib/format';
+import { formatDateVN, toDong, toQty } from '../../lib/format';
 
 interface Props {
   rows: StockTxn[];
@@ -42,9 +42,9 @@ export function TxnLogTable({ rows, onVoid }: Props) {
                     <span className={`gf-trade-badge ${isBuy ? 'buy' : 'sell'}`}>{isBuy ? 'MUA' : 'BÁN'}</span>
                   </td>
                   <td className="muted">{toQty(Number(t.qty))}</td>
-                  <td>{toNghin(Number(t.price), 1)}</td>
-                  <td className="muted">{toNghin(Number(t.net_price), 2)}</td>
-                  <td className="strong">{toTrieu(Number(t.net_value), 2)}</td>
+                  <td>{toDong(Number(t.price))}</td>
+                  <td className="muted">{toDong(Number(t.net_price))}</td>
+                  <td className="strong">{toDong(Number(t.net_value))}</td>
                   <td
                     className="gf-trade-del"
                     title="Bỏ ghi giao dịch (giữ vết kiểm toán)"

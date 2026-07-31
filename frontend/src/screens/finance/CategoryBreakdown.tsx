@@ -1,4 +1,4 @@
-import { toTrieu } from '../../lib/format';
+import { toDong } from '../../lib/format';
 
 export interface CategoryItem {
   name: string;
@@ -26,7 +26,7 @@ export function CategoryBreakdown({ items, yearLabel }: CategoryBreakdownProps) 
             <div className="gf-fin-cat-head">
               <span className="gf-fin-cat-name">{c.name}</span>
               <span className="gf-fin-cat-value gf-num">
-                {toTrieu(c.amount, 1)} · {c.pct.toFixed(0)}%
+                {toDong(c.amount)} · {c.pct.toFixed(0)}%
               </span>
             </div>
             <div className="gf-fin-cat-track">

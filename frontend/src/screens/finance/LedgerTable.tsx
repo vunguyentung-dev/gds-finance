@@ -1,5 +1,5 @@
 import type { FinEntry } from '../../api/finance';
-import { formatDateVN, formatSignedTrieu } from '../../lib/format';
+import { formatDateVN, typedDong } from '../../lib/format';
 import { categoryColor } from './constants';
 
 interface LedgerTableProps {
@@ -22,7 +22,7 @@ export function LedgerTable({ entries, onDelete }: LedgerTableProps) {
               <th style={{ width: 110 }}>Ngày</th>
               <th>Ghi chú</th>
               <th style={{ width: 170 }}>Loại</th>
-              <th style={{ width: 130, textAlign: 'right' }}>Số tiền</th>
+              <th style={{ width: 160, textAlign: 'right' }}>Số tiền</th>
               <th style={{ width: 40 }} />
             </tr>
           </thead>
@@ -40,7 +40,7 @@ export function LedgerTable({ entries, onDelete }: LedgerTableProps) {
                   className="gf-fin-td-amount"
                   style={{ color: entry.entry_type === 'in' ? 'var(--up)' : 'var(--down)' }}
                 >
-                  {formatSignedTrieu(Number(entry.amount), entry.entry_type, 2)}
+                  {typedDong(Number(entry.amount), entry.entry_type)}
                 </td>
                 <td className="gf-fin-td-delete" onClick={() => onDelete(entry.id)}>
                   ✕

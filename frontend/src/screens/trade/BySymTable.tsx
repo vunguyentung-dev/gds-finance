@@ -1,5 +1,5 @@
 import type { BySymRow } from '../../api/stock';
-import { formatVN, signedTrieu, toNghin, toQty, toTrieu } from '../../lib/format';
+import { formatVN, signedDong, toDong, toQty } from '../../lib/format';
 
 interface Props {
   rows: BySymRow[];
@@ -39,13 +39,13 @@ export function BySymTable({ rows }: Props) {
                     <b>{r.sym}</b>
                   </td>
                   <td>{toQty(Number(r.shares))}</td>
-                  <td className="muted">{r.avg_cost === null ? '—' : toNghin(Number(r.avg_cost), 2)}</td>
+                  <td className="muted">{r.avg_cost === null ? '—' : toDong(Number(r.avg_cost))}</td>
                   <td className="strong">
-                    {Number(r.shares) > 0 ? toTrieu(Number(r.net_value), 2) : '—'}
+                    {Number(r.shares) > 0 ? toDong(Number(r.net_value)) : '—'}
                   </td>
                   <td className="muted">{sold > 0 ? toQty(sold) : '—'}</td>
                   <td className="bold" style={{ color: sold > 0 ? color : undefined }}>
-                    {sold > 0 ? signedTrieu(realized, 2) : '—'}
+                    {sold > 0 ? signedDong(realized) : '—'}
                   </td>
                   <td className="strong" style={{ color: sold > 0 ? color : undefined }}>
                     {sold > 0 && pct !== null ? `${pct >= 0 ? '+' : ''}${formatVN(pct, 2)}%` : '—'}
