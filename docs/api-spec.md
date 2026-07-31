@@ -586,7 +586,7 @@ BÁN  1500 @ 120000 đồng/cp  ngày 2025-02-03  (thứ Hai — chỉ giữ 100
 
 | Mục | Kỳ vọng | Ghi chú |
 |---|---|---|
-| `by_sym.avg_cost` | `100150.0000` | |
+| `by_sym.avg_cost` | **`null`** | hết hàng ⇒ hiển thị `—`; xem ghi chú bên dưới |
 | `by_sym.sold` | `1000` | **không phải 1500** — cap ở dòng 1129 |
 | `by_sym.shares` | `0` | |
 | `by_sym.net_value` | `0.0000` | |
@@ -613,6 +613,14 @@ BÁN  1500 @ 120000 đồng/cp  ngày 2025-02-03  (thứ Hai — chỉ giữ 100
 2. **`engines_diverge` phải là `false`.** VD4 *không* làm hai engine lệch nhau,
    dù có bán vượt. Nếu cài ra `true` ở đây thì logic cap bị sai ở một trong hai
    engine. Ca duy nhất làm lệch là **VD2** (nhiều lô khác giá).
+
+3. **`avg_cost` phải là `null`, không phải `100150.0000`.** Giá vốn bình quân
+   `100.150` có tồn tại nhưng chỉ là **giá trị trung gian** dùng để tính `base`
+   trong lúc xử lý lệnh bán. Sau khi bán, `shares = 0` nên giá vốn bình quân
+   **không còn nghĩa** — gốc dòng **1147** trả `'—'` khi `shares <= 0.0001`:
+   `avg: a.shares > 0.0001 ? this.fmt(a.cost / a.shares, 2) : '—'`.
+   Tương tự cho `realized_pct`: vẫn có giá trị (`19.52`) vì nó chia cho
+   `sold_base`, không phụ thuộc `shares`.
 
 ### Bảng đối chiếu nhanh 4 ví dụ
 
