@@ -7,14 +7,19 @@
  */
 defined('ABSPATH') || exit;
 
-define('GDSFIN_VERSION', '1.1.0');
-define('GDSFIN_DB_VERSION', '1.1.0');
+define('GDSFIN_VERSION', '1.2.0');
+define('GDSFIN_DB_VERSION', '1.2.0');
 define('GDSFIN_PATH', plugin_dir_path(__FILE__));
 define('GDSFIN_URL', plugin_dir_url(__FILE__));
 
 require_once GDSFIN_PATH . 'includes/class-activator.php';
 require_once GDSFIN_PATH . 'includes/class-rest.php';
 require_once GDSFIN_PATH . 'includes/class-fin-personal.php';
+require_once GDSFIN_PATH . 'includes/class-fin-util.php';
+require_once GDSFIN_PATH . 'includes/class-fin-stock.php';
+require_once GDSFIN_PATH . 'includes/class-fin-journal.php';
+require_once GDSFIN_PATH . 'includes/class-fin-checklist.php';
+require_once GDSFIN_PATH . 'includes/class-fin-profile.php';
 
 register_activation_hook(__FILE__, ['GDSFIN_Activator', 'activate']);
 
@@ -22,12 +27,19 @@ add_action('plugins_loaded', function () {
     if (get_option('gdsfin_db_version') !== GDSFIN_DB_VERSION) {
         GDSFIN_Activator::activate();
         GDSFIN_Personal::create_table();
+        GDSFIN_Stock::create_tables();
+        GDSFIN_Journal::create_tables();
+        GDSFIN_Checklist::create_tables();
         update_option('gdsfin_db_version', GDSFIN_DB_VERSION);
     }
 });
 
 add_action('rest_api_init', ['GDSFIN_Rest', 'register_routes']);
 add_action('rest_api_init', ['GDSFIN_Personal', 'register_routes']);
+add_action('rest_api_init', ['GDSFIN_Stock', 'register_routes']);
+add_action('rest_api_init', ['GDSFIN_Journal', 'register_routes']);
+add_action('rest_api_init', ['GDSFIN_Checklist', 'register_routes']);
+add_action('rest_api_init', ['GDSFIN_Profile', 'register_routes']);
 
 add_shortcode('gds_finance_app', function () {
     $dist = GDSFIN_PATH . 'assets/dist/app.js';

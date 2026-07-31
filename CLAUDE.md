@@ -67,6 +67,37 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - DELETE fin/entries/{id}
 - GET    fin/summary?year=YYYY -> {year, years[], monthly[12]{in,out}, catTotals{}, inYear, outYear, net}
 
+Giao dịch cổ phiếu (chi tiết + ví dụ response: docs/api-spec.md):
+- GET    fin/stock-txns[?include_void=1] -> [{id, sym, txn_type, txn_date, qty, price, net_price, net_value}]
+- POST   fin/stock-txns       body {sym, txn_type:'buy'|'sell', txn_date, qty, price(đồng/cp, chuỗi)}
+- DELETE fin/stock-txns/{id}  -> {voided:1}  (void mềm, không xóa cứng)
+- GET    fin/stock-summary    -> {cards, by_sym[], flow[], footer}
+- GET    fin/rates            -> [{id, eff_date, buy_fee, sell_fee, tax}]
+- POST   fin/rates            body {eff_date, buy_fee, sell_fee, tax}  (upsert theo eff_date)
+
+Nhật ký thị trường:
+- GET    fin/journal[?year=&month=&flag=] -> [{id, mood, flag, vnindex, body, noted_at}]
+- GET    fin/journal/years    -> {years:[...]}
+- POST   fin/journal          body {mood, flag, vnindex|null, body}   (noted_at do backend đóng dấu)
+- DELETE fin/journal/{id}     -> {voided:1}
+
+Checklist mua/bán:
+- GET    fin/checklist/runs[?sym=]        -> [{id, sym, rec, done_at, created_at}]
+- POST   fin/checklist/runs               body {sym, rec}
+- GET    fin/checklist/runs/{id}          -> {…head, rows[], progress{done,total}}
+- PUT    fin/checklist/runs/{id}          body {rec, buy_price, sell_price, sell_date, vnindex}
+- PUT    fin/checklist/runs/{id}/rows     body {rows:[{row_key, row_status:'ok'|'no'|'na'|'', val}]}
+- POST   fin/checklist/runs/{id}/complete -> {done_at}
+
+Cài đặt:
+- GET    fin/profile          -> {name, broker, account}
+- POST   fin/profile          body {name, broker, account}
+
+Lưu ý khi dựng UI Giao dịch: backend đã tính sẵn lãi/lỗ, client KHÔNG tự tính.
+footer trả CẢ HAI số — cum_pl (engine FIFO, dùng cho chân bảng timeline) và
+total_realized (engine bình quân, dùng cho thẻ đầu màn) — kèm engines_diverge;
+khi engines_diverge=true PHẢI hiện cảnh báo, không được giấu.
+
 ## Design token (theme Sáng)
 --bg #faf9f7 · --panel #ffffff · --sidebar #ffffff · --border #eceae6
 --fg #18181b · --muted #71717a · --muted2 #a1a1aa · --chip #e4e4e7
