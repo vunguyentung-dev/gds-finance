@@ -21,15 +21,100 @@ tổng quát, **không dùng được cho cổ phiếu** — thiếu `sym`, `qty
 | Tỉ lệ % | `DECIMAL(8,5)`, `0.15000` nghĩa là 0,15% |
 | Xóa | **không xóa cứng** — `UPDATE status='void'`; GET mặc định chỉ trả `posted` |
 | Số học | **bcmath** (`bcmul/bcadd/bcsub/bcdiv`), tuyệt đối không float |
+| Scale | **tính trung gian scale 10**, chỉ cắt về scale 4 khi xuất JSON |
 | Làm tròn | **không làm tròn ở tầng lưu trữ và tầng API**; giữ nguyên scale 4. Chỉ làm tròn khi hiển thị |
 
 Lý do không làm tròn: mỗi công ty chứng khoán làm tròn phí khác nhau. Giữ số
 gốc thì sau này còn đối chiếu được với sao kê; lưu số đã tròn thì không khôi
 phục lại được.
 
+### 0.1 Scale bcmath — bắt buộc scale 10 ở tính trung gian
+
+`bcdiv()` **cắt cụt, không làm tròn**. Sai số bị cắt sẽ nhân với `qty` rồi cộng
+dồn qua từng lệnh, nên lệch dần chứ không tự triệt tiêu.
+
+Ba chỗ có phép chia trong pipeline:
+
+| Phép chia | Ở đâu |
+|---|---|
+| `bf = buy_fee / 100` (và `sf`, `tx`) | cả hai engine, gốc dòng 1120 / 1193 |
+| `avg = cost / shares` | engine A, gốc dòng 1128 |
+| `pct = realized / sold_base * 100` | engine A, gốc dòng 1143 |
+
+**Minh hoạ sai số** — mua 1000 cp @100.000 rồi mua thêm 500 cp @33.333:
+
+```
+cost   = 1000×100000×1.0015 + 500×33333×1.0015 = 116 841 499,75
+shares = 1500
+avg đúng      = 116 841 499,75 / 1500 = 77 894,3331666666…   (không dừng)
+avg cắt scale 4 = 77 894,3331
+kiểm tra lại: 77 894,3331 × 1500 = 116 841 499,65
+                        lệch ngay = 0,10 đồng
+```
+
+Chỉ **một** lệnh đã lệch 0,10 đồng, và `avg` còn được dùng tiếp để tính `base`,
+`realized`, `sold_base` cho mọi lệnh bán sau đó.
+
+**Quy tắc cài đặt:**
+
+```php
+bcscale(10);                       // hoặc truyền scale 10 vào từng lời gọi
+$avg = bcdiv($cost, $shares, 10);  // KHÔNG dùng scale 4 ở đây
+// … toàn bộ engine chạy ở scale 10 …
+$out = money_out($realized);       // chỉ cắt về 4 ở biên JSON
+```
+
+`bcmath` **không có hàm làm tròn**. Cắt về scale 4 ở biên phải tự làm tròn
+half-up, có xử lý dấu âm:
+
+```php
+function money_out(string $v): string {
+    $half = bccomp($v, '0', 10) < 0 ? '-0.00005' : '0.00005';
+    return bcadd($v, $half, 4);     // bcadd cắt cụt sau khi cộng -> thành half-up
+}
+```
+
 Đường dẫn thực tế thành `/wp-json/fin/v1/fin/stock-txns` (lặp chữ `fin`). Đây
 là quirk có sẵn của module thu/chi, giữ nguyên cho nhất quán. Nếu đổi thành
 `/fin/v1/stock-txns` thì phải sửa cả `frontend/src/api/`.
+
+### 0.2 Bảng con không có `user_id` — bắt buộc verify quyền sở hữu qua bảng cha
+
+`fin_checklist_rows` **không có cột `user_id`** (chủ ý: quyền sở hữu thuộc về
+`fin_checklist_runs`). Vì vậy `permission_callback` kiểm `fin_view`/`fin_manage`
+là **chưa đủ** — nó chỉ trả lời "user này có quyền dùng tính năng không", không
+trả lời "user này có sở hữu `run_id` này không".
+
+**Mọi endpoint đụng tới `rows` (đọc và ghi) phải verify `run_id` thuộc user hiện
+tại**, nếu không sẽ bị **IDOR**: user A đoán/sửa `run_id` là đọc và ghi được
+checklist của user B.
+
+```sql
+-- Bắt buộc chạy TRƯỚC mọi thao tác trên rows
+SELECT id FROM {$p}fin_checklist_runs
+ WHERE id = %d AND user_id = %d AND status = 'posted';
+-- không có dòng nào -> trả 404 (KHÔNG trả 403)
+```
+
+Khi ghi, ràng buộc luôn trong câu lệnh thay vì chỉ tin vào kiểm tra phía trên:
+
+```sql
+UPDATE {$p}fin_checklist_rows r
+  JOIN {$p}fin_checklist_runs n ON n.id = r.run_id
+   SET r.row_status = %s, r.val = %s
+ WHERE r.run_id = %d AND r.row_key = %s AND n.user_id = %d;
+```
+
+Áp dụng cho cả 3 endpoint: `GET .../runs/{id}`, `PUT .../runs/{id}/rows`,
+`POST .../runs/{id}/complete`.
+
+Trả **404 chứ không 403** khi `run_id` không thuộc user — trả 403 là xác nhận
+"`run_id` này có tồn tại, chỉ không phải của bạn", tức là làm lộ thông tin.
+
+Nguyên tắc tương tự cho các bảng còn lại: `fin_stock_txns`, `fin_rates`,
+`fin_journal`, `fin_checklist_runs` đều **có** `user_id`, nên mọi `UPDATE`/`DELETE`
+phải kèm `AND user_id = %d` ngay trong câu lệnh, không dựa vào việc đã lọc ở
+tầng PHP.
 
 ---
 
@@ -210,6 +295,40 @@ tiếp lô chưa về), chỉ **cảnh báo** chứ không chặn (dòng 1204). 
 ở dòng **1181–1186** — cộng 1 ngày, bỏ T7/CN, lặp tới khi đủ `n`; dùng giờ địa
 phương, **không** `toISOString` để tránh lệch UTC.
 
+### 2.5 Engine A cắt số bán theo `shares` đang giữ — và tính phí trên số CHƯA cắt
+
+**Dòng 1127–1131** (chú ý dòng 1127 dùng `t.qty`, dòng 1129 dùng `a.shares`):
+```js
+totalFees += t.qty * t.price * (sf + tx);        // 1127: qty CHƯA cắt
+const avg = a.shares > 0 ? a.cost / a.shares : 0;
+const qty = Math.min(t.qty, a.shares);           // 1129: CẮT theo số đang giữ
+const proceeds = qty * t.price * (1 - sf - tx);  // 1130: dùng qty ĐÃ cắt
+const base = avg * qty;
+```
+
+Hai hệ quả **phải cài đúng**, đây là chỗ dễ làm sai nhất của engine A:
+
+**a) Bán vượt số đang giữ thì phần vượt bị bỏ im lặng.** `Math.min` cắt xuống
+`a.shares`, engine A **không phát ra cảnh báo nào**. Tín hiệu duy nhất cho biết
+có lệnh bán vượt là `t2_state='short'` + `t2_avail` của engine B. Nếu bỏ engine B
+thì lệnh bán vượt trở thành vô hình.
+
+**b) Phí và thuế vẫn tính trên số lượng CHƯA cắt** (dòng 1127 dùng `t.qty`, không
+phải `qty` đã cắt ở 1129). Nên `total_fees` bao gồm cả phí của số cổ phiếu **chưa
+từng được bán**. Xem VD4 mục 4: bán 1500 khi chỉ giữ 1000 ⇒ `total_fees` khai
+thêm `150.000 đồng`. Giữ nguyên hành vi này để khớp bản gốc.
+
+> **Đính chính một nhận định dễ mắc.** Cap ở dòng 1129 **không** phải nguồn lệch
+> thứ hai giữa hai engine. Về **số lượng**, hai engine luôn cắt bằng nhau:
+> engine A cắt bằng `min(t.qty, a.shares)`, engine B cắt gián tiếp vì lượt 2 hết
+> lô để vét nên `need` còn dư — và `sold_qty = t.qty − need` luôn ra đúng bằng
+> `min(t.qty, tổng lô còn lại)`, mà tổng lô còn lại luôn bằng `a.shares`. VD4 đã
+> kiểm: hai engine cùng ra `19.550.000`, `engines_diff = 0`.
+>
+> Nguồn lệch `engines_diverge` **chỉ có một**: giá vốn bình quân gia quyền (engine A)
+> so với giá vốn lô FIFO (engine B) — xem VD2. Lượt 2 ở dòng 1208 ảnh hưởng
+> **lô nào** bị khớp (tức giá vốn), không ảnh hưởng **bao nhiêu cp** được khớp.
+
 ---
 
 ## 3. Endpoint — Giao dịch
@@ -225,8 +344,40 @@ dòng **825**).
 ### `POST fin/rates`
 ```json
 { "eff_date":"2026-01-01", "buy_fee":"0.20000", "sell_fee":"0.20000", "tax":"0.10000" }
-→ { "id":"2" }
+→ { "id":"2", "upserted":"insert" }      // "insert" | "update"
 ```
+
+**Phải là UPSERT, không phải INSERT thuần.** Bảng có `UNIQUE KEY uq_user_eff
+(user_id, eff_date)`, nên `INSERT` một mốc đã tồn tại sẽ lỗi duplicate. Prototype
+**ghi đè** mốc trùng ngày — hàm `applyRate` dòng **1270–1274**, chỗ ghi đè ở
+dòng **1273**:
+
+```js
+rates: [...s.rates.filter(r => r.date !== rateDraft.date),
+        { date: rateDraft.date, buyFee: bf, sellFee: sf, tax: tx }]
+```
+
+Lọc bỏ mốc cùng `date` rồi thêm bản mới vào — tức **ghi đè theo `eff_date`**.
+Cài bằng:
+
+```sql
+INSERT INTO {$p}fin_rates (user_id, eff_date, buy_fee, sell_fee, tax, created_at)
+VALUES (%d, %s, %s, %s, %s, %s)
+ON DUPLICATE KEY UPDATE
+  buy_fee = VALUES(buy_fee), sell_fee = VALUES(sell_fee), tax = VALUES(tax);
+```
+
+Giữ nguyên `created_at` cũ khi update (không đưa vào phần `UPDATE`) để còn biết
+mốc được tạo lần đầu khi nào.
+
+> Sửa biểu phí là **thay đổi hồi tố**: mọi giao dịch có `txn_date >= eff_date` sẽ
+> được tính lại theo mốc mới ở lần gọi `fin/stock-summary` kế tiếp. Đây là hành vi
+> đúng theo thiết kế (`rateFor` mục 2.1), không phải bug — nhưng nghĩa là lãi/lỗ
+> đã hiển thị trước đó có thể đổi. Cân nhắc cho client cảnh báo trước khi lưu.
+
+Xóa một mốc phí: prototype dòng **1267** (`rates.filter(x => x !== orig)`). Nếu
+cài `DELETE fin/rates/{id}` thì phải chặn xoá mốc cuối cùng — hết mốc thì
+`rateFor()` không có gì để trả.
 
 ### `POST fin/stock-txns`
 ```json
@@ -426,6 +577,56 @@ BÁN  1000 @ 110000 đồng/cp  ngày 2025-06-17  (thứ Ba — hàng CHƯA về
 "chặn bán" thì `row_pl` sẽ ra `0` — đó là sai so với gốc.
 `footer.flow_status` = `Đã bán sạch — lãi/lỗ cuối cùng` (dòng 1485).
 
+### VD4 — bán vượt TỔNG số đang giữ ⇒ cap của engine A + phí trên số chưa cắt
+
+```
+MUA  1000 @ 100000 đồng/cp  ngày 2025-01-06  (thứ Hai → settle 2025-01-08)
+BÁN  1500 @ 120000 đồng/cp  ngày 2025-02-03  (thứ Hai — chỉ giữ 1000 cp!)
+```
+
+| Mục | Kỳ vọng | Ghi chú |
+|---|---|---|
+| `by_sym.avg_cost` | `100150.0000` | |
+| `by_sym.sold` | `1000` | **không phải 1500** — cap ở dòng 1129 |
+| `by_sym.shares` | `0` | |
+| `by_sym.net_value` | `0.0000` | |
+| `by_sym.realized` | `19550000.0000` | tính trên 1000 cp |
+| `by_sym.realized_pct` | `19.52` (chính xác `19.5207189…`) | |
+| **`cards.total_fees`** | **`600000.0000`** | phí bán tính trên **1500** cp |
+| `cards.total_net_buy` | `100150000.0000` | |
+| `cards.total_net_sell` | `119700000.0000` | tiền bán chỉ của 1000 cp |
+| `cards.held_count` | `0` | |
+| `flow[1].t2_avail` | `1000`, `t2_state` = `short` | 1500 > 1000 |
+| `flow[1].row_pl` | `19550000.0000` | |
+| `footer.flow_remain` | `0` | |
+| `footer.cum_pl` | `19550000.0000` | |
+| `footer.total_realized` | `19550000.0000` | |
+| `footer.engines_diverge` | **`false`** | hai engine cắt số lượng bằng nhau |
+
+**Hai điểm VD4 dùng để bắt lỗi cài đặt:**
+
+1. **`total_fees` phải ra `600.000`, không phải `450.000`.** Phí mua `150.000` +
+   phí/thuế bán tính trên **1500** cp (`1500×120000×0.0025 = 450.000`). Nếu cài
+   dùng `qty` đã cắt thì sẽ ra `150.000 + 300.000 = 450.000` — **sai so với gốc**,
+   lệch `150.000 đồng`. Đây là hệ quả của dòng 1127 dùng `t.qty`, xem mục 2.5b.
+
+2. **`engines_diverge` phải là `false`.** VD4 *không* làm hai engine lệch nhau,
+   dù có bán vượt. Nếu cài ra `true` ở đây thì logic cap bị sai ở một trong hai
+   engine. Ca duy nhất làm lệch là **VD2** (nhiều lô khác giá).
+
+### Bảng đối chiếu nhanh 4 ví dụ
+
+| VD | Kiểm điều gì | `engines_diverge` |
+|---|---|---|
+| 1 | đường cơ bản, dữ liệu mẫu prototype, T+2 settle | `false` |
+| 2 | **giá vốn bình quân vs FIFO** — ca lệch duy nhất | **`true`**, diff `50075000` |
+| 3 | `t2_state = short` mà lệnh vẫn khớp qua lượt 2 | `false` |
+| 4 | cap theo `shares` + phí trên số chưa cắt | `false` |
+
+Cần cả 4: VD2 kiểm nhánh cảnh báo lệch engine, VD3 và VD4 kiểm hai kiểu "bán
+vượt" **khác nhau** (vượt số đã về vs vượt tổng số đang giữ) mà bản gốc xử lý
+theo hai cách khác nhau.
+
 ---
 
 ## 5. Endpoint — các màn còn lại
@@ -469,6 +670,10 @@ PUT  fin/checklist/runs/{id}/rows        -> upsert nhiều row một lượt
 POST fin/checklist/runs/{id}/complete    -> đóng dấu done_at
 ```
 
+> **Bắt buộc:** cả 3 endpoint có `{id}` phải verify `run_id` thuộc user hiện tại
+> trước khi đọc/ghi `rows` — xem mục **0.2**. Bảng `fin_checklist_rows` không có
+> `user_id`, thiếu bước này là lỗ IDOR.
+
 `GET fin/checklist/runs/{id}`:
 ```json
 {
@@ -509,7 +714,18 @@ POST fin/profile     body y hệt, lưu vào wp_usermeta
 - [ ] Tạo 6 bảng ở mục 1 (`fin_market_holidays` **để rỗng**)
 - [ ] Seed 1 dòng `fin_rates`: `2000-01-01 / 0.15 / 0.15 / 0.10`
 - [ ] Cài `add_trading_days()` có tham chiếu `fin_market_holidays`
+- [ ] `bcscale(10)` cho tính trung gian, chỉ cắt scale 4 ở biên JSON qua
+      `money_out()` half-up — mục **0.1**
 - [ ] Cài 2 engine ở mục 2, dùng bcmath, thứ tự `txn_date ASC, id ASC`
-- [ ] Verify VD1, VD2, VD3 ở mục 4 — khớp từng chữ số
+- [ ] Engine A: cap `min(t.qty, shares)` nhưng phí tính trên `t.qty` **chưa cắt**
+      — mục **2.5**
+- [ ] `POST fin/rates` dùng `ON DUPLICATE KEY UPDATE`, **không** `INSERT` thuần
+      (vướng `uq_user_eff`) — mục 3
+- [ ] Mọi endpoint `checklist/runs/{id}` verify `run_id` thuộc user, trả **404**
+      khi không thuộc — mục **0.2**, chống IDOR
+- [ ] `UPDATE`/`DELETE` các bảng khác luôn kèm `AND user_id = %d` trong câu lệnh
+- [ ] Verify **VD1, VD2, VD3, VD4** ở mục 4 — khớp từng chữ số.
+      Chú ý VD4 `total_fees = 600000` (không phải `450000`) và
+      VD2 là ca duy nhất `engines_diverge = true`
 - [ ] Bổ sung endpoint mới vào danh sách "Endpoint hiện có" trong `CLAUDE.md`
       (frontend bị chặn không được gọi endpoint ngoài danh sách đó)
