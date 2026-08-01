@@ -4,6 +4,7 @@ import { Topbar } from './Topbar';
 import { ScreenPlaceholder } from './ScreenPlaceholder';
 import { FinanceScreen } from '../screens/finance/FinanceScreen';
 import { TradeScreen } from '../screens/trade/TradeScreen';
+import { JournalScreen } from '../screens/journal/JournalScreen';
 import { titles, type Screen } from '../lib/nav';
 import { themeVars, type ThemeName } from '../lib/theme';
 
@@ -28,6 +29,8 @@ export function AppShell({ screen, theme, onNavigate, onToggleTheme }: AppShellP
             <FinanceScreen />
           ) : screen === 'trade' ? (
             <TradeScreen />
+          ) : screen === 'journal' ? (
+            <JournalScreen />
           ) : (
             <ScreenPlaceholder />
           )}

@@ -51,6 +51,19 @@ export function describeDong(dong: number): string {
   return `${formatVN(dong, 0)} đồng`;
 }
 
+/** VN-Index: bỏ số 0 lẻ vô nghĩa — 1312.70 -> "1.312,7", 1600.00 -> "1.600". */
+export function formatVnIndex(value: number): string {
+  return trimDecimalZeros(formatVN(value, 2));
+}
+
+/** DATETIME 'Y-m-d H:i:s' -> "DD/MM/YYYY HH:MM". */
+export function formatDateTimeVN(sqlDateTime: string): string {
+  const [d, t = ''] = sqlDateTime.split(' ');
+  const [y, m, dd] = d.split('-');
+  const hm = t.slice(0, 5);
+  return hm ? `${dd}/${m}/${y} ${hm}` : `${dd}/${m}/${y}`;
+}
+
 export function parseVNNumber(input: string): number {
   const cleaned = input.replace(/\./g, '').replace(',', '.');
   const n = parseFloat(cleaned);
