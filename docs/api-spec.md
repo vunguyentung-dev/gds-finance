@@ -1818,3 +1818,78 @@ phải nhập mỗi phiên.
 
 **(c) Ngưỡng `stale` = 3 phiên có áp cho cả `sparkline` và biểu đồ không?** Hiện
 biểu đồ chỉ báo `x/y phiên có đủ giá`. Có cần thêm `⚠` khi điểm cuối cũ ≥ 3 phiên?
+
+---
+
+## 10. Màn Bảng giá — biên độ giá
+
+Trạng thái: **ĐÃ CÀI** — verify 75 OK / 0 LỆCH.
+
+### 10.1 Không port được từ prototype
+
+`ceil` / `floor` / `vol` trong prototype (dòng 934-949) là **chuỗi hardcode**, không
+phải số tính ra, và **tự mâu thuẫn nhau** — không luật nào tái tạo được cả bộ:
+
+| Mã | TC | Trần prototype | Làm tròn xuống | Làm tròn gần nhất |
+|---|---|---|---|---|
+| FPT | 137,0 | **146,5** | 146,50 ✔ | 146,60 ✘ |
+| HPG | 26,9 | **28,8** | 28,75 ✘ | 28,80 ✔ |
+
+FPT khớp làm-tròn-xuống, HPG khớp làm-tròn-gần-nhất. Vì vậy bản cài dùng **luật thật
+của HOSE/HNX/UPCOM**, và số sẽ **khác ảnh thiết kế ở một số mã** (HPG: 28.750 chứ
+không phải 28.800). Đừng "sửa cho khớp ảnh" — ảnh sai.
+
+### 10.2 Công thức
+
+```
+Trần = bội số bước giá LỚN NHẤT  còn <= TC × (1 + biên)
+Sàn  = bội số bước giá NHỎ NHẤT  còn >= TC × (1 − biên)
+```
+
+Biên: HOSE **7%** · HNX **10%** · UPCOM **15%**.
+Bước giá (theo GIÁ THAM CHIẾU): HOSE 10 ₫ dưới 10.000 · 50 ₫ tới 49.950 · 100 ₫ từ
+50.000; HNX và UPCOM 100 ₫.
+
+Biên trùng giá tham chiếu (xảy ra khi biên nhỏ hơn một bước giá) thì lệch ra đúng một
+bước, nếu không mã đó "không được phép nhích".
+
+**CHƯA xử lý:** ETF, chứng quyền, ngày giao dịch đầu tiên, ngày sau hưởng quyền — các
+trường hợp này có biên riêng.
+
+### 10.3 `fin/quotes` trả thêm hai khối
+
+| Trường | Tính từ | Ý nghĩa |
+|---|---|---|
+| `band` | `prev_close` | Biên độ của **chính phiên đang hiện** — đi cùng cột TC/Khớp |
+| `next_band` | `close_price` | Biên độ **phiên kế tiếp** — số dùng để đặt lệnh |
+
+Hai khối này **khác nhau** và trả riêng, không gộp. Mỗi khối:
+`{ ceiling, floor, band_pct, tick, exchange }`.
+
+`null` khi **chưa biết sàn** (mã không có trong `fin_symbols`, hoặc sàn không thuộc
+ba sàn trên) hoặc **chưa có giá tham chiếu**. Không đoán bằng biên của HOSE — cùng
+nguyên tắc "null, không bịa số" của mục 8.4.
+
+### 10.4 Hai chỗ KHÔNG có dữ liệu, hiện `—`
+
+- **Khối lượng (KL).** `fin_quote_history` không có cột volume. Ô này để `—`, không
+  lấy số nào khác thay. Muốn có KL thì phải thêm cột và nguồn nạp trước.
+- **Giá realtime.** Bảng dùng giá **đóng cửa (EOD)**: `Khớp` = đóng cửa phiên gần
+  nhất, `TC` = đóng cửa phiên trước. Màn nói thẳng điều này ở băng đầu trang thay vì
+  để người dùng tưởng là giá trực tiếp.
+
+### 10.5 Lệch có chủ ý so với ảnh thiết kế
+
+Ảnh hiện giá theo **nghìn** (`146,5`). CLAUDE.md buộc **hiển thị theo đồng đầy đủ,
+không quy đổi**, nên màn hiện `146.500`. Đây là lệch có chủ ý, không phải sai sót.
+
+Màn thêm hai cột không có trong ảnh, đều là bắt buộc:
+- **Nguồn giá** — mục 9.1: không được hiện giá mà giấu nguồn
+- **nhập giá** — chưa nối nguồn tự động thì phải có đường nhập tay, nếu không màn
+  trống và không có cách nào thoát
+
+### 10.6 Danh sách mã do người dùng khai
+
+Bảng giá lấy mã từ `fin_symbols`, **không tự sinh**. Sàn là trường bắt buộc vì biên
+độ phụ thuộc nó. Tab: VN30 / HOSE / HNX / Tất cả, cộng tab cho sàn nào có mã mà không
+nằm trong ba tab gốc — để mã UPCOM không bị ẩn.
