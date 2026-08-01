@@ -758,7 +758,7 @@ Tình trạng từng mục:
 | Mục | Nội dung | Đã cài? |
 |---|---|---|
 | 1–6 | Giao dịch, Nhật ký, Checklist, Cài đặt | **Có** — verify 119 OK / 0 LỆCH |
-| 7 | Engine C — khớp lô đích danh | Chưa; quyết định đã chốt ở 7.9, đủ để cài |
+| 7 | Engine C — khớp lô đích danh | **Backend có** — verify 109 OK / 0 LỆCH; **UI chưa** (7.11) |
 | 8 | Giá EOD, tiền mặt, ngành, cổ tức | **Có** — verify 81 OK / 0 LỆCH; còn 2 điểm mở ở 8.12 |
 | 9 | Hiển thị nguồn giá trên UI | **Có** — verify 59 OK / 0 LỆCH |
 
@@ -766,8 +766,10 @@ Tình trạng từng mục:
 
 ## 7. Engine C — khớp lô đích danh (LỚP THÔNG TIN)
 
-Trạng thái: **spec, chưa cài.** Mục 1–6 đã cài và verify xong; mục này là phần bổ
-sung độc lập.
+Trạng thái: **ĐÃ CÀI** — verify 109 OK / 0 LỆCH. Cài ở file RIÊNG
+`class-fin-lots.php`; `GDSFIN_Stock::compute()` không gọi tới nó một dòng nào, nên
+ranh giới ở 7.1 được bảo đảm bằng cấu trúc chứ không bằng lời hứa trong comment.
+Backend xong, **chưa có UI** — xem 7.10.
 
 ### 7.1 Vai trò và ranh giới
 
@@ -886,6 +888,15 @@ là lãi tạm, không chặn.
 `pl = qty × net_unit_price − cost_matched` · `matched_pl = Σ pl`.
 Sắp `matches` theo đúng thứ tự đã khớp (rẻ nhất trước).
 
+Bản cài trả thêm, không có trong mẫu trên:
+
+| Trường | Ý nghĩa |
+|---|---|
+| `matches[].buy_price`, `matches[].unit_cost` | phơi luôn để UI đối chiếu được, không phải gọi thêm |
+| `engine`, `engine_note` | nhãn `"C"` + câu giải thích vì sao số này khác A/B. Nhãn engine là **bắt buộc** theo 7.1 |
+| `remaining.price` | khối nguồn gốc giá của mục 9.2 — `market_price` không được hiện mà giấu nguồn |
+| `remaining.lots[].unit_cost` | giá vốn 1 cp của phần còn nắm |
+
 `matched_pl` **chỉ là thông tin của lệnh bán này**, không được cộng vào bất kỳ
 tổng nào của engine A/B.
 
@@ -900,6 +911,10 @@ tổng nào của engine A/B.
 
 Bỏ trống `lot_matches` → hệ thống tự khớp theo 7.3, các dòng ghi `is_manual = 0`.
 Có `lot_matches` → ghi `is_manual = 1`.
+
+`lot_matches` được kiểm **trước** khi insert lệnh bán, nên một mảng sai không để lại
+lệnh rác trong sổ. Engine C chạy **sau** khi sổ gốc đã ghi: nó là lớp dẫn xuất,
+không được là điều kiện để lệnh vào được sổ.
 
 Chỉ áp dụng cho `txn_type='sell'`; gửi kèm cho lệnh mua trả **400**.
 
@@ -948,9 +963,12 @@ Vì vậy `remaining` là **phần bắt buộc** của response, và UI **khôn
 > `unrealized_pl = qty × market_price × (1 − sellFee − tax) − cost_basis`
 > — trừ sẵn phí bán để so cùng cơ sở với `matched_pl`.
 >
-> Hệ quả cần chấp nhận tới lúc đó: yêu cầu "bắt buộc hiện lãi/lỗ chưa thực hiện"
-> chỉ đáp ứng được **một nửa** (số lượng và giá vốn phần còn nắm), chưa ra được
-> con số lãi/lỗ. Nửa còn lại phụ thuộc màn Bảng giá.
+> **CẬP NHẬT sau khi cài:** đoạn trên viết khi chưa có nguồn giá. Mục 8 và 9 đã
+> cài, nên `remaining` gọi `GDSFIN_Market::quotes_for()` và ra được `unrealized_pl`
+> thật, kèm khối `price` (nguồn, phiên, độ cũ) theo mục 9.2. Luật cũ vẫn còn hiệu
+> lực đúng ở chỗ của nó: mã **chưa có giá nào** thì `market_price`, `unrealized_pl`
+> và `price` đều `null` — không lấy giá lệnh gần nhất, không lấy giá vốn làm giá
+> thị trường.
 
 ### 7.7 Toàn vẹn dữ liệu
 
@@ -1036,10 +1054,37 @@ engine C — đây là chốt kiểm cho ranh giới ở mục 7.1.
 | # | Vấn đề | Quyết định | Hệ quả |
 |---|---|---|---|
 | a | Cột `is_manual` | **CÓ** | Giữ được lựa chọn thủ công qua các lần khớp lại (7.7) |
-| b | `unrealized_pl` khi chưa có giá thị trường | **Trả `null`** | Không bịa số; phần lãi/lỗ chưa thực hiện chỉ đủ khi làm xong màn Bảng giá (7.6) |
+| b | `unrealized_pl` khi chưa có giá thị trường | **Trả `null`** | Không bịa số. **Đã hết treo:** mục 8/9 cài xong nên `remaining` lấy giá từ `GDSFIN_Market::quotes_for()` và ra được số thật; chỉ khi mã đó chưa có giá nào thì mới `null`. Kèm khối `price` theo mục 9 |
 | c | `txn_date` cuối tuần | **Giữ nguyên, không chặn** | `2026-08-01` (thứ Bảy) vẫn nhập được, khớp hành vi prototype gốc |
 
 Không còn điểm treo. Spec mục 7 đã đủ để cài.
+
+### 7.10 Phát sinh khi cài — hai điểm spec chưa nói
+
+**(1) Sổ lệnh CÓ TRƯỚC engine C không có dòng khớp nào.** Khớp tự động chỉ chạy lúc
+tạo lệnh, nên mọi lệnh bán đã nằm trong sổ từ trước sẽ ra `matched_qty = 0` — sai
+hẳn, không phải thiếu sót nhỏ. Cài `ensure_backfilled()`: khớp bù **một lần** cho
+mỗi user, đánh dấu bằng `user_meta gdsfin_lots_backfilled`.
+
+Không khớp bù lười theo từng lệnh bán khi user mở xem: làm vậy thì phân bổ phụ
+thuộc vào việc user bấm xem lệnh nào trước — hai người xem theo hai thứ tự sẽ ra hai
+kết quả khác nhau. Khớp cả mã một lượt theo ngày bán tăng dần mới xác định.
+
+**(2) Void một lệnh bán giải phóng lô, phải khớp lại.** Bảng 7.7 chỉ nói "xoá các
+dòng match của nó". Nhưng lô vừa được giải phóng có thể là lô rẻ mà một lệnh bán
+**sau đó** đang thiếu hoặc đang phải lấy lô đắt hơn. Không khớp lại thì để lại phân
+bổ cũ đã sai. Bản cài gọi `rematch_symbol()` sau khi void — chỉ chạm dòng
+`is_manual = 0`, nên ghim tay của user vẫn nguyên.
+
+### 7.11 Chưa làm — UI
+
+Backend xong, **màn Giao dịch chưa có chỗ nào hiện engine C**. Khi làm UI, hai ràng
+buộc không được bỏ:
+
+- `matched_pl` **không được** hiện mà thiếu `remaining` (7.6) — nếu không thì màn
+  hình sẽ báo lãi cao hơn thực chất, vì phần chênh đã bị đẩy sang phần còn nắm
+- mỗi số phải có **nhãn engine** (7.1) — ba engine ra ba con số khác nhau trên cùng
+  một lệnh bán, số không nhãn là số không đọc được
 
 ---
 
