@@ -38,6 +38,14 @@ class GDSFIN_Market {
     const S = GDSFIN_Util::S;
     const CRON_HOOK = 'gdsfin_fetch_eod_quotes';
 
+    /**
+     * Giờ chạy cron nạp giá, theo giờ site (phải là giờ VN — xem GDSFIN_Util::tz()).
+     * 15:05 là sau khi MỌI bảng đã đóng: HOSE/HNX chốt ATC 14:45 rồi thoả thuận tới
+     * 15:00, UPCOM giao dịch tới 15:00. Nên giá 15:05 là giá đóng cửa cho cả ba.
+     * Đổi được bằng filter 'gdsfin_quote_cron_time'.
+     */
+    const CRON_TIME = '15:05';
+
     /* ===================== BẢNG ===================== */
 
     public static function create_tables() {
@@ -99,7 +107,7 @@ class GDSFIN_Market {
      * và ngày trong fin_market_holidays. Dùng chung logic ngày lễ với T+2 (mục 2.4).
      */
     public static function last_trading_day(?string $from = null): string {
-        $d = new DateTimeImmutable(($from ?: current_time('Y-m-d')) . ' 00:00:00', wp_timezone());
+        $d = new DateTimeImmutable(($from ?: GDSFIN_Util::today()) . ' 00:00:00', GDSFIN_Util::tz());
         $h = GDSFIN_Util::holidays();
         for ($i = 0; $i < 30; $i++) {
             $wd = (int) $d->format('N');
@@ -199,7 +207,7 @@ class GDSFIN_Market {
                sector=VALUES(sector), in_vn30=VALUES(in_vn30), updated_at=VALUES(updated_at)",
             $sym, sanitize_text_field((string) ($b['name'] ?? $sym)), $ex,
             isset($b['sector']) && $b['sector'] !== '' ? sanitize_text_field((string) $b['sector']) : null,
-            !empty($b['in_vn30']) ? 1 : 0, current_time('mysql')
+            !empty($b['in_vn30']) ? 1 : 0, GDSFIN_Util::now_mysql()
         ));
         return rest_ensure_response(['sym' => $sym]);
     }
@@ -258,7 +266,7 @@ class GDSFIN_Market {
         if ($behind)  $reasons[] = 'giá cũ hơn phiên ' . $ltd . ': ' . implode(', ', $behind);
 
         return rest_ensure_response([
-            'as_of'            => current_time('mysql'),
+            'as_of'            => GDSFIN_Util::now_mysql(),
             'last_trading_day' => $ltd,
             'is_stale'         => (bool) ($missing || $behind),
             'stale_reason'     => $reasons ? implode(' · ', $reasons) : null,
@@ -271,7 +279,7 @@ class GDSFIN_Market {
         $sym = strtoupper(sanitize_text_field((string) $req->get_param('sym')));
         if ($sym === '') return new WP_Error('bad_sym', 'Thiếu tham số sym', ['status' => 400]);
         $from = GDSFIN_Util::is_date((string) $req->get_param('from')) ? $req->get_param('from') : '1970-01-01';
-        $to   = GDSFIN_Util::is_date((string) $req->get_param('to')) ? $req->get_param('to') : current_time('Y-m-d');
+        $to   = GDSFIN_Util::is_date((string) $req->get_param('to')) ? $req->get_param('to') : GDSFIN_Util::today();
 
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT trade_date, close, source FROM " . self::t_hist() . "
@@ -321,7 +329,7 @@ class GDSFIN_Market {
         $list = isset($b['quotes']) && is_array($b['quotes']) ? $b['quotes'] : [];
         if (!$list) return new WP_Error('empty', 'Cần ít nhất một dòng trong "quotes"', ['status' => 400]);
 
-        $today = current_time('Y-m-d');
+        $today = GDSFIN_Util::today();
         $h     = GDSFIN_Util::holidays();
         $t     = self::t_hist();
         $n = 0; $warnings = [];
@@ -344,7 +352,7 @@ class GDSFIN_Market {
                 return new WP_Error('bad_close', "close phải > 0 (mã $sym)", ['status' => 400]);
             }
             // Ngày không phải phiên: CHO ghi nhưng cảnh báo (nhất quán với 7.9c)
-            $d  = new DateTimeImmutable($date . ' 00:00:00', wp_timezone());
+            $d  = new DateTimeImmutable($date . ' 00:00:00', GDSFIN_Util::tz());
             $wd = (int) $d->format('N');
             if ($wd >= 6 || isset($h[$date])) {
                 $warnings[] = "$sym $date không phải phiên giao dịch";
@@ -355,7 +363,7 @@ class GDSFIN_Market {
                  VALUES (%s, %s, %s, NULL, 'manual', %d, %s)
                  ON DUPLICATE KEY UPDATE close=VALUES(close), source='manual',
                    entered_by=VALUES(entered_by), updated_at=VALUES(updated_at)",
-                $sym, $date, bcadd($close, '0', 4), get_current_user_id(), current_time('mysql')
+                $sym, $date, bcadd($close, '0', 4), get_current_user_id(), GDSFIN_Util::now_mysql()
             ));
             $n++;
         }
@@ -430,7 +438,7 @@ class GDSFIN_Market {
                 "INSERT INTO $t (sym, trade_date, close, volume, source, entered_by, updated_at)
                  VALUES (%s, %s, %s, NULL, %s, NULL, %s)
                  ON DUPLICATE KEY UPDATE close=VALUES(close), source=VALUES(source), updated_at=VALUES(updated_at)",
-                $sym, $date, bcadd((string) $close, '0', 4), $src->name(), current_time('mysql')
+                $sym, $date, bcadd((string) $close, '0', 4), $src->name(), GDSFIN_Util::now_mysql()
             ));
             $updated++;
         }
@@ -444,10 +452,28 @@ class GDSFIN_Market {
     }
 
     /** Đặt cron chạy sau phiên. Xem cảnh báo về WP-Cron ở mục 8.11. */
+    private static function cron_time(): string {
+        $t = (string) apply_filters('gdsfin_quote_cron_time', self::CRON_TIME);
+        return preg_match('/^\d{2}:\d{2}$/', $t) ? $t : self::CRON_TIME;
+    }
+
+    /**
+     * Đặt cron chạy sau khi ATC chốt. Nếu lịch đang đăng ký lệch giờ cấu hình thì
+     * ĐẶT LẠI — nếu chỉ `return` khi đã có lịch thì đổi CRON_TIME sẽ không có tác
+     * dụng và cron cứ nổ theo giờ cũ mãi.
+     */
     public static function schedule_cron() {
-        if (wp_next_scheduled(self::CRON_HOOK)) return;
-        $tz   = wp_timezone();
-        $next = new DateTimeImmutable('today 15:30', $tz);
+        $tz   = GDSFIN_Util::tz();
+        $time = self::cron_time();
+        $existing = wp_next_scheduled(self::CRON_HOOK);
+
+        if ($existing) {
+            $cur = (new DateTimeImmutable('@' . $existing))->setTimezone($tz)->format('H:i');
+            if ($cur === $time) return;              // đã đúng giờ, không làm gì
+            wp_unschedule_event($existing, self::CRON_HOOK);
+        }
+
+        $next = new DateTimeImmutable("today $time", $tz);
         if ($next->getTimestamp() <= time()) $next = $next->modify('+1 day');
         wp_schedule_event($next->getTimestamp(), 'daily', self::CRON_HOOK);
     }
@@ -460,7 +486,7 @@ class GDSFIN_Market {
     public static function run_cron() {
         $ltd = self::last_trading_day();
         // Không chạy nếu hôm nay không phải phiên
-        if ($ltd !== current_time('Y-m-d')) return;
+        if ($ltd !== GDSFIN_Util::today()) return;
         self::fetch_eod($ltd);
     }
 
@@ -510,7 +536,7 @@ class GDSFIN_Market {
             $sym, $ex, $pay, $kind,
             $kind === 'cash' ? bcadd((string) $b['cash_per_share'], '0', 4) : null,
             $kind === 'stock' && isset($b['stock_ratio']) ? (string) $b['stock_ratio'] : null,
-            sanitize_text_field((string) ($b['note'] ?? '')), current_time('mysql')
+            sanitize_text_field((string) ($b['note'] ?? '')), GDSFIN_Util::now_mysql()
         ));
         return rest_ensure_response(['sym' => $sym, 'ex_date' => $ex, 'kind' => $kind]);
     }

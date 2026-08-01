@@ -105,9 +105,9 @@ class GDSFIN_Journal {
             'flag'       => $flag,
             'vnindex'    => $vn,
             'body'       => wp_kses_post($body),
-            'noted_at'   => current_time('mysql'),
+            'noted_at'   => GDSFIN_Util::now_mysql(),
             'status'     => 'posted',
-            'created_at' => current_time('mysql'),
+            'created_at' => GDSFIN_Util::now_mysql(),
         ]);
         return rest_ensure_response(['id' => (string) $wpdb->insert_id]);
     }

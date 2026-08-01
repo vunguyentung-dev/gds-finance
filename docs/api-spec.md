@@ -753,11 +753,14 @@ POST fin/profile     body y hệt, lưu vào wp_usermeta
 - [ ] Bổ sung endpoint mới vào danh sách "Endpoint hiện có" trong `CLAUDE.md`
       (frontend bị chặn không được gọi endpoint ngoài danh sách đó)
 
-Mục **7 (engine C)** và mục **8 (giá thị trường, tiền mặt, ngành, cổ tức)** là hai
-phần bổ sung ĐỘC LẬP, chưa cài. Mục 1–6 đã cài và verify 119 OK / 0 LỆCH.
-Mục 7 đã chốt xong quyết định ở **7.9**, đủ để cài.
-Mục 8 còn 4 điểm cần chốt ở **8.10** — trong đó (a) nguồn giá là quyết định của
-người dùng vì có ràng buộc pháp lý và chi phí.
+Tình trạng từng mục:
+
+| Mục | Nội dung | Đã cài? |
+|---|---|---|
+| 1–6 | Giao dịch, Nhật ký, Checklist, Cài đặt | **Có** — verify 119 OK / 0 LỆCH |
+| 7 | Engine C — khớp lô đích danh | Chưa; quyết định đã chốt ở 7.9, đủ để cài |
+| 8 | Giá EOD, tiền mặt, ngành, cổ tức | **Có** — verify 81 OK / 0 LỆCH; còn 2 điểm mở ở 8.12 |
+| 9 | Hiển thị nguồn giá trên UI | Chưa; **đòi sửa 3 chỗ của mục 8 đã cài** — xem 9.6 |
 
 ---
 
@@ -1316,8 +1319,11 @@ một đường lịch sử sai.
 - [ ] 3 bảng tham chiếu ở 8.3 (`fin_symbols`, `fin_quote_history`, `fin_dividends`);
       **không** tạo mới `fin_accounts`/`fin_transactions`, cũng **không** tạo
       `fin_quotes` — `last`/`prev_close` suy từ `fin_quote_history` (8.11)
-- [ ] Cron lấy giá EOD sau 15:30, chỉ mã đang nắm; nguồn lỗi thì ghi log, **không**
-      ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
+- [ ] Mọi mốc thời gian dùng `GDSFIN_Util::now_mysql()/today()/year()/tz()`, **không**
+      dùng `current_time()`/`wp_timezone()` — neo cứng GMT+7, không phụ thuộc setting
+      site (8.11). Đã dọn hết, không còn ngoại lệ; `grep` để chắc
+- [ ] Cron lấy giá EOD **15:05 giờ VN**, chỉ mã đang nắm; nguồn lỗi thì ghi log,
+      **không** ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
 - [ ] Cron **không ghi đè** dòng `source='manual'` — luật cốt lõi ở 8.11
 - [ ] Thiếu giá trả `null` + `is_stale`/`reason`; **không** dùng giá vốn thay giá TT
 - [ ] `unrealized_pl` trừ phí bán ước tính, `total_asset` thì **không** trừ (8.8)
@@ -1335,7 +1341,7 @@ một đường lịch sử sai.
 | # | Vấn đề | Quyết định |
 |---|---|---|
 | a | Cách lấy giá | **Tự động lấy giá đóng cửa cuối ngày, nhập tay để bù khi thiếu** — chi tiết ở 8.11. Nhà cung cấp cụ thể **chưa chọn**; 8.11 mô tả hợp đồng adapter nên không phải chờ điều đó mới cài được phần còn lại |
-| b | Tần suất | **Cuối ngày (EOD)**, không realtime |
+| b | Tần suất | **Cuối ngày (EOD)**, không realtime. Nạp lúc **15:05 giờ VN**, bỏ T7/CN và ngày lễ — xem 8.11 |
 | c | Ngưỡng `is_stale` | **Theo phiên, không theo đồng hồ**: cũ khi phiên giao dịch gần nhất > `MAX(trade_date)` đang có. Không cần ngưỡng phút |
 | d | Một hay nhiều tài khoản tiền | **Còn mở** — xem 8.12 |
 
@@ -1390,9 +1396,82 @@ interface GDSFIN_Quote_Source {
 Nguồn nào cũng phải kiểm trước: điều khoản sử dụng có cho dùng kiểu này không,
 giới hạn số lần gọi, và có đủ mã mình cần không.
 
+#### Múi giờ: neo cứng GIỜ VIỆT NAM trong code, KHÔNG dựa vào setting site
+
+Mọi mốc thời gian nghiệp vụ dùng `GDSFIN_Util::tz()` = **`Asia/Ho_Chi_Minh` (GMT+7)**,
+**không** dùng `wp_timezone()` / `current_time()`.
+
+| Thay cho | Dùng |
+|---|---|
+| `current_time('mysql')` | `GDSFIN_Util::now_mysql()` |
+| `current_time('Y-m-d')` | `GDSFIN_Util::today()` |
+| `(int) current_time('Y')` | `GDSFIN_Util::year()` |
+| `wp_timezone()` | `GDSFIN_Util::tz()` |
+
+Đổi được bằng filter `gdsfin_timezone` nếu sau này phục vụ thị trường khác.
+
+**Vì sao không dựa vào setting site.** Đo trên môi trường local ngày 2026-08-01,
+site đang để UTC:
+
+```
+  wp_timezone()          = +00:00           (UTC)
+  current_time(mysql)    = 2026-08-01 02:26
+  giờ VN thật            = 2026-08-01 09:26
+  cron "15:05 giờ site"  = 22:05 giờ VN     <-- 7 tiếng SAU khi thị trường đóng
+```
+
+Hai hệ quả nếu để phụ thuộc setting, cái thứ hai âm thầm hơn:
+
+1. **Cron nổ sai giờ.** Đặt 15:05 mà thực tế 22:05 giờ VN.
+2. **Lệch cả NGÀY trong khoảng 00:00–07:00 giờ VN.** UTC chậm hơn VN 7 tiếng nên
+   một ghi chép lúc **06:00 ngày 02/08 giờ VN** bị đóng dấu **01/08**:
+
+   ```
+   thời điểm thật (VN)      = 2026-08-02 06:00
+   cùng lúc đó theo UTC     = 2026-08-01 23:00
+   current_time('Y-m-d')    = 2026-08-01   <-- LỆCH NGÀY
+   GDSFIN_Util::today()     = 2026-08-02   <-- ĐÚNG
+   ```
+
+   Ảnh hưởng `noted_at` của nhật ký, `done_at` của checklist, `last_trading_day()`.
+   Tệ hơn: form frontend mặc định ngày theo **giờ trình duyệt** trong khi backend
+   đóng dấu theo **UTC** — hai bên lệch nhau mà không ai báo lỗi.
+
+Frontend cũng neo giờ VN: `todayIso()` trong `lib/format.ts` dùng
+`Intl.DateTimeFormat` với `timeZone: 'Asia/Ho_Chi_Minh'` thay vì giờ máy người dùng.
+
+> **Setting timezone của site KHÔNG cần đổi.** Neo cứng trong code nên số liệu đúng
+> bất kể site để múi giờ nào, và không ai đổi setting về sau mà làm sai dữ liệu được.
+> Nếu vẫn muốn đổi setting cho WordPress core (dấu thời gian bài viết, log) thì cứ
+> đổi — hai bên sẽ trùng nhau, không gây lệch kép.
+
+> **Không còn ngoại lệ nào.** Toàn bộ backend đã dùng `GDSFIN_Util`, kể cả
+> `class-fin-personal.php` (mặc định `entry_date`, `created_at`, năm mặc định của
+> `summary()`) và `class-rest.php` (endpoint `/transactions` cũ). Kiểm bằng:
+>
+> ```
+> grep -rn "current_time\|wp_timezone" backend/includes/*.php backend/gds-finance.php
+> # chỉ còn trong comment
+> ```
+>
+> `class-rest.php` quan trọng vì nó ghi vào **cùng bảng** `wp_fin_transactions` mà
+> module tiền mặt dùng — để lệch múi giờ thì một bảng có hai chuẩn thời gian.
+
 #### Cron
 
-- Chạy **sau khi phiên kết thúc**. Sàn VN khớp ATC tới ~14:45, nên 15:30 là an toàn.
+- Chạy lúc **15:05 giờ VN**, tức sau khi **mọi bảng** đã đóng:
+
+  | Bảng | Kết thúc |
+  |---|---|
+  | HOSE | ATC 14:45, thoả thuận tới 15:00 |
+  | HNX | ATC 14:45, PLO tới 15:00 |
+  | UPCOM | giao dịch tới 15:00 |
+
+  Chọn 15:05 thay vì 14:50 nên **không còn** vấn đề UPCOM lấy giá trong phiên —
+  một lịch duy nhất phục vụ được cả ba bảng.
+- Giờ đặt ở hằng số `GDSFIN_Market::CRON_TIME`, đổi được bằng filter
+  `gdsfin_quote_cron_time`. Lịch **tự đặt lại** khi giờ cấu hình đổi — nếu chỉ đặt
+  lịch một lần lúc bump DB version thì đổi hằng số sẽ không có tác dụng.
 - Chỉ lấy các mã **đang thực sự nắm giữ** (suy từ `fin_stock_txns`, `shares > 0`)
   cộng các mã có phiên checklist đang mở. Không quét cả sàn — vô ích và tốn quota.
 - Nguồn lỗi thì **ghi log và bỏ qua**, không ghi `close = 0` hay giá cũ dưới ngày mới.
@@ -1475,3 +1554,161 @@ và màn Cài đặt cần chỗ quản lý danh sách tài khoản.
 UI nhập tay bù, cron khung — làm được hết trước. Khi chọn xong chỉ cần viết một
 class thoả `GDSFIN_Quote_Source`. Trước khi chốt cần kiểm ba thứ: điều khoản sử
 dụng, giới hạn số lần gọi, độ phủ mã mình cần.
+
+---
+
+## 9. Hiển thị nguồn giá trên UI
+
+Trạng thái: **spec, chưa cài.** Mục 8 đã cài (81 OK / 0 LỆCH) nhưng **chưa** đáp
+ứng mục này — xem 9.6 để biết phải sửa gì.
+
+### 9.1 Nguyên tắc
+
+**Bất cứ nơi nào hiển thị giá thị trường đều phải kèm nguồn và thời điểm lấy.
+UI KHÔNG được hiện giá mà giấu nguồn.**
+
+Lý do: giá thị trường là số **đến từ bên ngoài và có thể sai hoặc cũ**, khác hẳn
+giá vốn (do người dùng tự nhập, luôn đúng). Một con số trông giống nhau nhưng độ
+tin cậy khác nhau thì phải nói rõ, nếu không người dùng sẽ ra quyết định dựa trên
+giá đã chết vài phiên mà không biết.
+
+### 9.2 Trường API bắt buộc
+
+Mọi response có giá thị trường phải kèm:
+
+| Trường | Kiểu | Nghĩa |
+|---|---|---|
+| `close_price` | chuỗi \| null | Giá đóng cửa, ĐỒNG/cp. `null` = chưa có giá |
+| `source` | chuỗi \| null | Tên nguồn thắng, vd `auto:ssi`, `manual` |
+| `fetched_at` | chuỗi \| null | `Y-m-d H:i:s` — lúc lấy được / lúc người dùng nhập |
+| `is_manual` | bool | `true` khi `source = 'manual'` |
+| `trade_date` | chuỗi \| null | Phiên mà giá này thuộc về |
+| `sessions_behind` | int \| null | Số **phiên giao dịch** giữa `trade_date` và phiên gần nhất. `0` = giá của phiên gần nhất |
+| `staleness` | chuỗi | `current` (0 phiên) \| `recent` (1–2) \| `stale` (≥3) \| `none` (chưa có giá) |
+
+`is_manual` là suy ra được từ `source` nhưng vẫn trả riêng: UI dùng nó để chọn cách
+hiển thị, và nếu chỉ có `source` thì mỗi nơi lại tự so chuỗi `=== 'manual'` một kiểu.
+
+### 9.3 Chuỗi hiển thị
+
+Ba dạng, đúng thứ tự ưu tiên:
+
+```
+có giá tự động   ->  19.000 ₫ · SSI · 01/08 16:30
+có giá thủ công  ->  19.000 ₫ · thủ công · 01/08
+chưa có giá      ->  chưa có giá
+```
+
+**Quy tắc dựng chuỗi:**
+
+1. **Ngày hiển thị là `trade_date`** (phiên mà giá thuộc về), không phải ngày lấy.
+2. **Giá tự động: kèm giờ** từ `fetched_at`, vì trong ngày giá có thể được lấy lại.
+3. **Giá thủ công: không kèm giờ.** Người dùng tự nhập nên giờ không mang thêm
+   thông tin; phiên nào mới là điều cần biết.
+4. **Nếu `fetched_at` rơi vào ngày KHÁC `trade_date`** (lấy hôm nay giá của phiên
+   trước), hiển thị cả hai để không gây nhầm:
+   `19.000 ₫ · SSI · phiên 31/07 · lấy 01/08 16:30`
+5. Tên nguồn hiển thị dạng thân thiện: `auto:ssi` → `SSI`, `manual` → `thủ công`.
+   Ánh xạ này ở frontend, không hardcode ở backend.
+
+> **Điểm mơ hồ tôi đã tự quyết.** Yêu cầu ghi `"19.000 ₫ · thủ công · 01/08"` mà
+> không nói `01/08` là phiên hay ngày nhập. Tôi chọn **phiên** (`trade_date`), vì
+> đó là thứ quyết định con số có dùng được không. Quy tắc 4 xử lý trường hợp hai
+> ngày khác nhau. Nếu ý bạn là ngày nhập thì nói để tôi sửa.
+
+### 9.4 Cảnh báo giá cũ
+
+| `staleness` | Điều kiện | Hiển thị |
+|---|---|---|
+| `current` | `sessions_behind = 0` | bình thường |
+| `recent` | 1–2 phiên | chữ nguồn/ngày màu `--muted2` |
+| `stale` | **≥ 3 phiên** | thêm `⚠` trước chuỗi + toàn bộ dòng phụ màu `--muted2`, tooltip nêu rõ số phiên |
+| `none` | chưa có giá | `chưa có giá`, màu `--muted2` |
+
+Ví dụ dạng `stale`: `⚠ 19.000 ₫ · SSI · phiên 28/07 · cũ 3 phiên`
+
+`sessions_behind` đếm bằng **phiên giao dịch**, không phải ngày lịch — dùng chung
+logic bỏ T7/CN và `fin_market_holidays` như T+2 (mục 2.4). Nghỉ lễ dài thì đếm theo
+ngày lịch sẽ báo động sai.
+
+> **Vì sao cảnh báo nhẹ chứ không chặn:** giá cũ 3 phiên vẫn hữu ích hơn không có
+> giá. Chặn hiển thị sẽ khiến người dùng mất luôn thông tin. Nhưng phải thấy được
+> là nó cũ — nhất là khi **mọi nguồn cùng chết**, lúc đó số vẫn hiện bình thường
+> nhiều ngày liền và đó chính là lúc dễ ra quyết định sai nhất.
+
+### 9.5 Nơi phải áp dụng
+
+| Vị trí | Hiện trạng |
+|---|---|
+| Màn Tổng quan — bảng "Danh mục nắm giữ", cột Giá TT | có badge `nhập tay` nhưng **thiếu** `fetched_at` và cảnh báo cũ |
+| Màn Tổng quan — thẻ Tổng tài sản, Lãi/lỗ phiên gần nhất | **thiếu** dòng phụ ghi nguồn/phiên |
+| Màn Tổng quan — biểu đồ Giá trị danh mục | có `x/y phiên có đủ giá`, cần thêm cảnh báo khi điểm cuối `stale` |
+| Màn Giao dịch — `remaining.unrealized_pl` của **engine C** | mục 7 chưa cài; khi cài phải theo mục này |
+| Màn Bảng giá, Phân tích | chưa cài; áp dụng ngay từ đầu |
+
+### 9.6 Mục 8 đã cài KHÔNG khớp mục này — ba việc phải sửa
+
+**(1) Tên trường `close` → `close_price`.** `GET fin/quotes` và
+`GET fin/quotes/history` hiện trả `close`
+(`class-fin-market.php` dòng ~228, ~284). Đổi tên thì phải sửa cả phía đọc:
+`frontend/src/api/overview.ts` và `screens/overview/*`. Đây là đổi phá vỡ hợp đồng,
+làm một lần dứt điểm, đừng để hai tên song song.
+
+**(2) Thiếu `fetched_at`, `is_manual`, `sessions_behind`, `staleness`.** Cột trong
+DB là `updated_at` (bảng `fin_quote_history`), không phải `fetched_at`. **Không cần
+migrate**: API cứ trả `fetched_at` lấy giá trị từ cột `updated_at`. Với dòng
+`manual` thì `updated_at` chính là lúc người dùng nhập, nên nghĩa vẫn đúng.
+
+**(3) MỘT nguồn → CHUỖI nhiều nguồn.** Đây là thay đổi lớn nhất.
+
+Mục 8.11 hiện định nghĩa **một** nguồn duy nhất, cắm qua filter
+`gdsfin_quote_source`. Yêu cầu mục này nói tới **"cả 3 nguồn đều lỗi"**, tức cần
+chuỗi nguồn có dự phòng. Sửa thành:
+
+```php
+// Thay filter số ít bằng danh sách theo thứ tự ưu tiên
+$sources = apply_filters('gdsfin_quote_sources', [ /* GDSFIN_Quote_Source[] */ ]);
+```
+
+Cách chạy:
+
+```
+Với mỗi mã:
+  duyệt nguồn theo thứ tự ưu tiên
+  nguồn đầu tiên trả về giá hợp lệ (> 0) thì THẮNG -> ghi source = tên nguồn đó
+  nguồn lỗi hoặc trả null -> ghi log, thử nguồn kế tiếp
+  hết nguồn mà vẫn không có -> KHÔNG ghi dòng nào (giữ nguyên luật "không ghi giá rác")
+
+Dòng source='manual' vẫn luôn thắng mọi nguồn tự động (luật cốt lõi 8.11).
+```
+
+Nên có thêm endpoint chẩn đoán, vì "cả 3 nguồn cùng chết" là tình huống cần thấy
+được từ bên trong:
+
+```
+GET fin/quotes/health -> [{ source, last_ok_at, last_error_at, last_error, ok_rate_7d }]
+```
+
+### 9.7 Điểm cần bạn quyết
+
+**(a) Nhà cung cấp — CHƯA CHỐT, đang xin quyền.** `SSI` trong ví dụ chuỗi hiển thị
+chỉ là minh hoạ định dạng, không phải quyết định. Ba nơi đang xin: SSI, VPS, TCBS.
+Với mỗi nơi vẫn cần kiểm trước khi cắm vào: điều khoản sử dụng có cho phép dùng
+theo cách này, giới hạn số lần gọi, và độ phủ mã mình cần.
+
+**(b) Ba nguồn — ĐÃ BIẾT TÊN, chưa có quyền truy cập.** Người dùng có tài khoản ở
+**SSI**, **VPS**, **TCBS** và đang xin quyền dùng API. **Thứ tự ưu tiên chưa chốt.**
+
+Vì vậy làm theo hai bước:
+
+1. Cài **khung chuỗi nguồn** (filter `gdsfin_quote_sources`) + nhập tay bù. Chạy
+   được ngay, không phụ thuộc bên nào.
+2. Khi có quyền từng nơi thì thêm một class thoả `GDSFIN_Quote_Source` cho nơi đó
+   và đưa vào danh sách. Thứ tự ưu tiên đặt bằng thứ tự trong mảng, đổi được không
+   cần sửa code lõi.
+
+Chưa xin được nơi nào thì app vẫn dùng được hoàn toàn bằng giá nhập tay — chỉ là
+phải nhập mỗi phiên.
+
+**(c) Ngưỡng `stale` = 3 phiên có áp cho cả `sparkline` và biểu đồ không?** Hiện
+biểu đồ chỉ báo `x/y phiên có đủ giá`. Có cần thêm `⚠` khi điểm cuối cũ ≥ 3 phiên?

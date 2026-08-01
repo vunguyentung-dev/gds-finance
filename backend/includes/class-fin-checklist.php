@@ -120,7 +120,7 @@ class GDSFIN_Checklist {
             'sym'        => $sym,
             'rec'        => in_array($b['rec'] ?? '', self::RECS, true) ? $b['rec'] : 'watch',
             'status'     => 'posted',
-            'created_at' => current_time('mysql'),
+            'created_at' => GDSFIN_Util::now_mysql(),
         ]);
         return rest_ensure_response(['id' => (string) $wpdb->insert_id]);
     }
@@ -216,7 +216,7 @@ class GDSFIN_Checklist {
         $id = absint($req['id']);
         if (!self::own_run($id)) return self::not_found();          // IDOR guard
 
-        $now = current_time('mysql');
+        $now = GDSFIN_Util::now_mysql();
         $wpdb->update(self::t_run(), ['done_at' => $now], ['id' => $id, 'user_id' => get_current_user_id()]);
         return rest_ensure_response(['done_at' => $now]);
     }

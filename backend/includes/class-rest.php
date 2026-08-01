@@ -27,7 +27,7 @@ class GDSFIN_Rest {
         global $wpdb;
         $uid  = get_current_user_id();          // luôn lấy từ session
         $from = sanitize_text_field($req->get_param('from') ?: '1970-01-01');
-        $to   = sanitize_text_field($req->get_param('to') ?: current_time('Y-m-d'));
+        $to   = sanitize_text_field($req->get_param('to') ?: GDSFIN_Util::today());
 
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT id, txn_date, direction, amount, fee, note
@@ -49,12 +49,12 @@ class GDSFIN_Rest {
         $wpdb->insert("{$wpdb->prefix}fin_transactions", [
             'user_id'    => $uid,
             'account_id' => absint($b['account_id'] ?? 0),
-            'txn_date'   => sanitize_text_field($b['txn_date'] ?? current_time('Y-m-d')),
+            'txn_date'   => sanitize_text_field($b['txn_date'] ?? GDSFIN_Util::today()),
             'direction'  => in_array($b['direction'] ?? '', ['in','out'], true) ? $b['direction'] : 'out',
             'amount'     => number_format((float)($b['amount'] ?? 0), 4, '.', ''),
             'note'       => sanitize_text_field($b['note'] ?? ''),
             'status'     => 'posted',
-            'created_at' => current_time('mysql'),
+            'created_at' => GDSFIN_Util::now_mysql(),
         ]);
 
         return rest_ensure_response(['id' => $wpdb->insert_id]);

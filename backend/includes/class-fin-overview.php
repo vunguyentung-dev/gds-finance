@@ -54,8 +54,8 @@ class GDSFIN_Overview {
 
     private static function trading_days_between(string $from, string $to): int {
         $h = GDSFIN_Util::holidays();
-        $d = new DateTimeImmutable($from . ' 00:00:00', wp_timezone());
-        $e = new DateTimeImmutable($to . ' 00:00:00', wp_timezone());
+        $d = new DateTimeImmutable($from . ' 00:00:00', GDSFIN_Util::tz());
+        $e = new DateTimeImmutable($to . ' 00:00:00', GDSFIN_Util::tz());
         $n = 0;
         while ($d <= $e) {
             $wd = (int) $d->format('N');
@@ -155,10 +155,16 @@ class GDSFIN_Overview {
         // ---- Thẻ KPI ----
         $miss_txt = $missing ? 'thiếu giá: ' . implode(', ', $missing) : null;
 
+        // Chưa thiết lập tài khoản tiền thì balance không có nghĩa là số dư (xem
+        // ghi chú 'configured' ở GDSFIN_Cash::summary), nên Tổng tài sản cũng chưa tính được.
+        $cash_ok  = !empty($cash['configured']);
+        $cash_why = 'chưa thiết lập tài khoản tiền — thêm ở màn Cài đặt';
+
+        $asset_ok = $all_priced && $cash_ok;
         $total_asset = self::card(
-            $all_priced ? GDSFIN_Util::money_out(bcadd($cash['balance'], $mkt_total, self::S)) : null,
-            $all_priced,
-            $all_priced ? null : $miss_txt
+            $asset_ok ? GDSFIN_Util::money_out(bcadd($cash['balance'], $mkt_total, self::S)) : null,
+            $asset_ok,
+            $asset_ok ? null : trim(($all_priced ? '' : $miss_txt . ' · ') . ($cash_ok ? '' : $cash_why), ' ·')
         );
 
         $sess_ok = $all_priced && $all_have_prev && $syms;
@@ -175,7 +181,7 @@ class GDSFIN_Overview {
         );
 
         // Cổ tức dự kiến/năm — KHÁC cổ tức đã nhận đang ghi ở fin_personal (mục 8.7)
-        $year = (int) current_time('Y');
+        $year = GDSFIN_Util::year();
         $dps  = GDSFIN_Market::cash_dividend_per_share($syms, $year);
         $div_total = '0'; $has_div = false;
         foreach ($syms as $sym) {
@@ -210,7 +216,7 @@ class GDSFIN_Overview {
         // ---- Đường giá trị danh mục ----
         $days = max(1, min(365, (int) ($req->get_param('days') ?: 90)));
         $to   = $ltd;
-        $from = (new DateTimeImmutable($to . ' 00:00:00', wp_timezone()))->modify("-{$days} day")->format('Y-m-d');
+        $from = (new DateTimeImmutable($to . ' 00:00:00', GDSFIN_Util::tz()))->modify("-{$days} day")->format('Y-m-d');
         $txns = self::shares_timeline($uid);
 
         $dates = $wpdb->get_col($wpdb->prepare(
@@ -234,7 +240,7 @@ class GDSFIN_Overview {
         }
 
         return rest_ensure_response([
-            'as_of'            => current_time('mysql'),
+            'as_of'            => GDSFIN_Util::now_mysql(),
             'last_trading_day' => $ltd,
             'price_coverage'   => [
                 'held'    => count($syms),
@@ -245,7 +251,7 @@ class GDSFIN_Overview {
                 'total_asset'          => $total_asset,
                 'last_session_pl'      => $last_session_pl,
                 'last_session_pl_pct'  => $last_session_pct,
-                'cash_available'       => self::card($cash['balance'], true, null),
+                'cash_available'       => self::card($cash['balance'], $cash_ok, $cash_ok ? null : $cash_why),
                 'dividend_year'        => $dividend_year,
                 'realized_pl'          => self::card($stock['cards']['total_realized'], true, null),
             ],

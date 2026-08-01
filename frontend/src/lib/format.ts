@@ -75,7 +75,17 @@ export function formatDateVN(isoDate: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/**
+ * Hôm nay theo GIỜ VIỆT NAM (GMT+7), không theo giờ trình duyệt.
+ * Backend đóng dấu theo giờ VN (GDSFIN_Util::tz), nên nếu client lấy ngày theo máy
+ * người dùng thì hai bên lệch ngày khi trình duyệt ở múi giờ khác.
+ */
 export function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  return parts; // en-CA cho ra đúng dạng YYYY-MM-DD
 }

@@ -158,5 +158,7 @@ Gap chính 14-16px, padding thẻ 18px.
 trên nhánh riêng. Cài mục 8 TRƯỚC mục 7.
 Bắt buộc: verify bằng dữ liệu thật đang có trong DB, in bảng đối chiếu
 "kỳ vọng vs thực tế". Không báo hoàn thành nếu còn dòng lệch.
-KHÔNG đụng class-fin-personal.php, endpoint fin/entries, và engine A/B
-đã verify 119 OK — nếu số nào của chúng đổi thì đó là lỗi.
+KHÔNG làm ĐỔI SỐ của endpoint fin/entries, fin/summary, và engine A/B
+(đã verify 119 OK) — nếu số nào của chúng đổi thì đó là lỗi.
+Được sửa class-fin-personal.php cho việc chuẩn hoá múi giờ về GMT+7
+(đã làm xong, đã chứng minh số không đổi byte-for-byte).

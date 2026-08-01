@@ -7,6 +7,7 @@ import { TradeScreen } from '../screens/trade/TradeScreen';
 import { JournalScreen } from '../screens/journal/JournalScreen';
 import { ChecklistScreen } from '../screens/checklist/ChecklistScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { OverviewScreen } from '../screens/overview/OverviewScreen';
 import { titles, type Screen } from '../lib/nav';
 import { themeVars, type ThemeName } from '../lib/theme';
 
@@ -27,7 +28,9 @@ export function AppShell({ screen, theme, onNavigate, onToggleTheme }: AppShellP
       <main className="gf-main">
         <Topbar screenTitle={screenTitle} theme={theme} onToggleTheme={onToggleTheme} />
         <div className="gf-content">
-          {screen === 'finance' ? (
+          {screen === 'overview' ? (
+            <OverviewScreen />
+          ) : screen === 'finance' ? (
             <FinanceScreen />
           ) : screen === 'trade' ? (
             <TradeScreen />

@@ -14,8 +14,10 @@ define('GDSFIN_URL', plugin_dir_url(__FILE__));
 
 require_once GDSFIN_PATH . 'includes/class-activator.php';
 require_once GDSFIN_PATH . 'includes/class-rest.php';
-require_once GDSFIN_PATH . 'includes/class-fin-personal.php';
+// Nạp util TRƯỚC các module nghiệp vụ: mọi module đều dùng GDSFIN_Util (múi giờ,
+// bcmath, định dạng), nên để nó lên đầu cho đúng thứ tự phụ thuộc.
 require_once GDSFIN_PATH . 'includes/class-fin-util.php';
+require_once GDSFIN_PATH . 'includes/class-fin-personal.php';
 require_once GDSFIN_PATH . 'includes/class-fin-stock.php';
 require_once GDSFIN_PATH . 'includes/class-fin-journal.php';
 require_once GDSFIN_PATH . 'includes/class-fin-checklist.php';
@@ -51,6 +53,11 @@ add_action('rest_api_init', ['GDSFIN_Overview', 'register_routes']);
 
 // Cron nạp giá cuối ngày — xem cảnh báo về WP-Cron ở docs/api-spec.md mục 8.11
 add_action(GDSFIN_Market::CRON_HOOK, ['GDSFIN_Market', 'run_cron']);
+
+// Tự chỉnh lịch khi giờ cấu hình đổi. Hàm này thoát sớm khi lịch đã đúng giờ nên
+// không ghi gì trong trường hợp bình thường; nếu chỉ đặt lịch lúc bump DB version
+// thì đổi CRON_TIME sẽ không có tác dụng.
+add_action('init', ['GDSFIN_Market', 'schedule_cron']);
 
 add_shortcode('gds_finance_app', function () {
     $dist = GDSFIN_PATH . 'assets/dist/app.js';
