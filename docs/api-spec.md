@@ -1076,15 +1076,39 @@ dòng match của nó". Nhưng lô vừa được giải phóng có thể là l�
 bổ cũ đã sai. Bản cài gọi `rematch_symbol()` sau khi void — chỉ chạm dòng
 `is_manual = 0`, nên ghim tay của user vẫn nguyên.
 
-### 7.11 Chưa làm — UI
+### 7.11 UI — ĐÃ CÀI phần đọc
 
-Backend xong, **màn Giao dịch chưa có chỗ nào hiện engine C**. Khi làm UI, hai ràng
-buộc không được bỏ:
+Màn Giao dịch: mỗi lệnh **bán** ở bảng T+2 có nút `lô` mở panel
+`LotDetail.tsx`. Hai ràng buộc được cài thành **cấu trúc của panel**, không phải
+tuỳ chọn của người viết UI về sau:
 
-- `matched_pl` **không được** hiện mà thiếu `remaining` (7.6) — nếu không thì màn
-  hình sẽ báo lãi cao hơn thực chất, vì phần chênh đã bị đẩy sang phần còn nắm
-- mỗi số phải có **nhãn engine** (7.1) — ba engine ra ba con số khác nhau trên cùng
-  một lệnh bán, số không nhãn là số không đọc được
+- "Đã chốt" và "Còn nắm" là **hai cột cạnh nhau trong cùng một panel**, không tách
+  tab, không thu gọn. Không có đường nào trong code hiện `matched_pl` mà thiếu
+  `remaining` (7.6)
+- mỗi con số có **nhãn engine** (7.1). Panel còn có khối đối chiếu
+  **engine B vs engine C vs chênh lệch** cho cùng lệnh bán, kèm câu giải thích chênh
+  lệch nằm ở đâu
+
+Giá thị trường trong `remaining` hiện theo mục 9: `21.500` + dòng phụ
+`thủ công · 31/07`; chưa có giá thì `chưa có giá` và `— cần giá thị trường`.
+
+Panel tự nạp lại sau khi thêm/void lệnh, vì hai việc đó có thể làm engine C khớp
+lại lô (7.7) khiến số đang hiện thành số cũ.
+
+**CHƯA làm — ghim lô bằng tay trên UI.** `POST fin/stock-txns` đã nhận
+`lot_matches` và backend đã verify đủ, nhưng form đặt lệnh chưa có chỗ chọn lô. Thiếu
+một endpoint: để user chọn được thì UI phải biết **lô nào còn bao nhiêu cp chưa
+khớp** tại một (mã, ngày) — số này client **không tự suy ra được**, vì nó phụ thuộc
+dòng khớp của *mọi* lệnh bán khác. Cần thêm:
+
+```
+GET fin/stock-txns/available-lots?sym=KDH&on=2026-08-01
+-> { sym, on, lots: [{ buy_txn_id, buy_date, qty_total, qty_matched, qty_left,
+                       unit_cost, settled, settle_date }] }
+```
+
+Thứ tự trả về = đúng thứ tự engine C sẽ tự khớp, để UI hiện được "hệ thống sẽ chọn
+lô này" trước khi user quyết định ghim khác đi.
 
 ---
 

@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { PriceInfo } from '../lib/price';
 
 export type TxnType = 'buy' | 'sell';
 export type T2State = 'settled_future' | 'ok' | 'short';
@@ -64,6 +65,66 @@ export interface StockSummary {
   by_sym: BySymRow[];
   flow: FlowRow[];
   footer: SummaryFooter;
+}
+
+/* ===================== ENGINE C — khớp lô đích danh ===================== */
+
+/** Một lô mua bị lệnh bán ăn vào. docs/api-spec.md mục 7.5. */
+export interface LotMatch {
+  buy_txn_id: string;
+  buy_date: string;
+  qty: string;
+  buy_price: string;
+  /** Giá vốn 1 cp = giá mua × (1 + phí mua ngày đó). */
+  unit_cost: string;
+  cost_matched: string;
+  pl: string;
+  /** Lô đã về (T+2) tại ngày bán hay chưa. Chưa về VẪN tính lãi, chỉ gắn cờ. */
+  settled: boolean;
+  settle_date: string;
+  /** true = user tự ghim lô này, không phải hệ thống chọn. */
+  is_manual: boolean;
+}
+
+export interface RemainingLot {
+  buy_txn_id: string;
+  buy_date: string;
+  qty: string;
+  unit_cost: string;
+  cost_basis: string;
+}
+
+/**
+ * Phần còn nắm. BẮT BUỘC hiện kèm matched_pl (mục 7.6): khớp lô rẻ trước đẩy lô
+ * giá cao ở lại danh mục, chênh lệch không mất đi mà chuyển sang đây.
+ */
+export interface LotRemaining {
+  qty: string;
+  cost_basis: string;
+  market_price: string | null;
+  unrealized_pl: string | null;
+  price: PriceInfo | null;
+  lots: RemainingLot[];
+}
+
+export interface LotDetail {
+  sell_txn_id: string;
+  sym: string;
+  txn_date: string;
+  qty: string;
+  price: string;
+  net_unit_price: string;
+  matched_qty: string;
+  unmatched_qty: string;
+  matches: LotMatch[];
+  matched_pl: string;
+  engine: string;
+  engine_note: string;
+  remaining: LotRemaining;
+}
+
+export function getLotDetail(sellTxnId: string) {
+  return apiClient.get<LotDetail>(`fin/stock-txns/${sellTxnId}/lots`);
 }
 
 export interface RateTier {

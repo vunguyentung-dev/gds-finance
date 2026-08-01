@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../../api/client';
 import {
   createStockTxn,
+  getLotDetail,
   getRates,
   getStockSummary,
   getStockTxns,
   voidStockTxn,
+  type LotDetail as LotDetailData,
   type RateTier,
   type StockSummary,
   type StockTxn,
@@ -16,6 +18,7 @@ import { SummaryCards } from './SummaryCards';
 import { TxnForm, type TxnDraft } from './TxnForm';
 import { BySymTable } from './BySymTable';
 import { FlowTable } from './FlowTable';
+import { LotDetail } from './LotDetail';
 import { TxnLogTable } from './TxnLogTable';
 import '../../styles/trade.css';
 
@@ -57,6 +60,13 @@ export function TradeScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
+  // --- engine C: panel chi tiết lô của một lệnh bán ---
+  const [lotsId, setLotsId] = useState<string | null>(null);
+  const [lots, setLots] = useState<LotDetailData | null>(null);
+  const [lotsLoading, setLotsLoading] = useState(false);
+  const [lotsError, setLotsError] = useState('');
+  const [lotsReload, setLotsReload] = useState(0);
+
   const load = useCallback((ignore: { current: boolean }) => {
     Promise.all([getStockSummary(), getStockTxns(), getRates()]).then(
       ([sum, list, rs]) => {
@@ -90,7 +100,53 @@ export function TradeScreen() {
     const [sum, list] = await Promise.all([getStockSummary(), getStockTxns()]);
     setSummary(sum);
     setTxns(list);
+    // Thêm/void một lệnh có thể khiến engine C khớp lại các lô (api-spec 7.7), nên
+    // panel đang mở là số cũ. Nạp lại thay vì để user nhìn số đã lỗi thời. Không bật
+    // cờ loading ở đây: giữ số cũ trong lúc nạp đỡ nháy hơn là thay bằng spinner.
+    setLotsReload((n) => n + 1);
   }, []);
+
+  // Chi tiết lô nạp riêng, KHÔNG gộp vào load() đầu màn: nó là dữ liệu của một lệnh
+  // cụ thể, tải hết mọi lệnh bán ngay từ đầu là N request cho thứ user chưa mở.
+  useEffect(() => {
+    if (lotsId === null) return;
+    // KHÔNG setState đồng bộ trong effect (eslint react-hooks/set-state-in-effect):
+    // cờ loading do chính hành vi mở panel / bấm Thử lại đặt, effect chỉ ghi kết quả.
+    const ignore = { current: false };
+    getLotDetail(lotsId).then(
+      (d) => {
+        if (ignore.current) return;
+        setLots(d);
+        setLotsLoading(false);
+      },
+      (err) => {
+        if (ignore.current) return;
+        setLots(null);
+        setLotsError(errorMessageOf(err));
+        setLotsLoading(false);
+      },
+    );
+    return () => {
+      ignore.current = true;
+    };
+  }, [lotsId, lotsReload]);
+
+  const handleToggleLots = (id: string) => {
+    if (lotsId === id) {
+      setLotsId(null);
+      return;
+    }
+    setLotsId(id);
+    setLots(null);
+    setLotsError('');
+    setLotsLoading(true);
+  };
+
+  const handleRetryLots = () => {
+    setLotsError('');
+    setLotsLoading(true);
+    setLotsReload((n) => n + 1);
+  };
 
   const handleSideChange = (side: TxnType) => setDraft((d) => ({ ...d, side }));
 
@@ -190,12 +246,30 @@ export function TradeScreen() {
       />
 
       <BySymTable rows={summary.by_sym} />
-      <FlowTable rows={summary.flow} footer={summary.footer} />
+      <FlowTable
+        rows={summary.flow}
+        footer={summary.footer}
+        openLotsId={lotsId}
+        onToggleLots={handleToggleLots}
+      />
+
+      {lotsId !== null && (
+        <LotDetail
+          detail={lots}
+          loading={lotsLoading}
+          error={lotsError}
+          engineBPl={summary.flow.find((f) => f.id === lotsId)?.row_pl ?? null}
+          onClose={() => setLotsId(null)}
+          onRetry={handleRetryLots}
+        />
+      )}
+
       <TxnLogTable rows={txns} onVoid={handleVoid} />
 
       <div className="gf-trade-note">
         Lãi/lỗ thực hiện = tiền bán ròng (sau phí bán + thuế) − giá vốn bình quân của phần đã bán (giá mua đã gồm phí
         mua). Mã chưa bán chưa phát sinh lãi/lỗ. Xoá giao dịch là đánh dấu bỏ ghi, dữ liệu vẫn được giữ để kiểm toán.
+        Không void được lệnh mua khi vẫn có lệnh bán khớp vào nó — void lệnh bán trước.
       </div>
     </div>
   );

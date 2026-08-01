@@ -177,7 +177,8 @@ Gap chính 14-16px, padding thẻ 18px.
 ## Nới phạm vi tạm thời — để cài mục 7, 8, 9 của api-spec
 Được sửa backend/ CHỈ để cài mục 7 (engine C khớp lô đích danh), mục 8 (giá EOD,
 tiền mặt, ngành, cổ tức) và mục 9 (hiển thị nguồn giá), trên nhánh riêng.
-Cả ba đã cài xong ở backend. Engine C CHƯA có UI — xem api-spec mục 7.11.
+Cả ba đã cài xong ở backend. Engine C đã có UI phần ĐỌC; ghim lô bằng tay
+chưa có UI vì còn thiếu endpoint available-lots — xem api-spec mục 7.11.
 Ràng buộc giữ nguyên: KHÔNG làm ĐỔI SỐ của fin/entries, fin/summary, và engine A/B.
 Bắt buộc: verify bằng dữ liệu thật đang có trong DB, in bảng đối chiếu
 "kỳ vọng vs thực tế". Không báo hoàn thành nếu còn dòng lệch.
