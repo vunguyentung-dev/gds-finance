@@ -10,6 +10,7 @@ import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { OverviewScreen } from '../screens/overview/OverviewScreen';
 import { BoardScreen } from '../screens/board/BoardScreen';
 import { AnalysisScreen } from '../screens/analysis/AnalysisScreen';
+import { NewsScreen } from '../screens/news/NewsScreen';
 import { titles, type Screen } from '../lib/nav';
 import { themeVars, type ThemeName } from '../lib/theme';
 
@@ -30,7 +31,9 @@ export function AppShell({ screen, theme, onNavigate, onToggleTheme }: AppShellP
       <main className="gf-main">
         <Topbar screenTitle={screenTitle} theme={theme} onToggleTheme={onToggleTheme} />
         <div className="gf-content">
-          {screen === 'analysis' ? (
+          {screen === 'news' ? (
+            <NewsScreen />
+          ) : screen === 'analysis' ? (
             <AnalysisScreen theme={theme} />
           ) : screen === 'board' ? (
             <BoardScreen />

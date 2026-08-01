@@ -761,6 +761,10 @@ Tình trạng từng mục:
 | 7 | Engine C — khớp lô đích danh | **Backend có** — verify 109 OK / 0 LỆCH; **UI chưa** (7.11) |
 | 8 | Giá EOD, tiền mặt, ngành, cổ tức | **Có** — verify 81 OK / 0 LỆCH; còn 2 điểm mở ở 8.12 |
 | 9 | Hiển thị nguồn giá trên UI | **Có** — verify 59 OK / 0 LỆCH |
+| 10 | Màn Bảng giá — biên độ giá | **Có** — verify 75 OK / 0 LỆCH |
+| 11 | Màn Phân tích — nhúng TradingView | **Có**, nhưng TradingView chặn dữ liệu VN (11.1) |
+| 12 | Chỉ báo tính từ fin_quote_history | **Có** — verify 52 OK / 0 LỆCH |
+| 13 | Màn Tin tức — RSS | **Có** — verify 104 OK / 0 LỆCH |
 
 ---
 
@@ -2056,3 +2060,216 @@ Thiết kế gốc có thẻ *"MUA — Tích cực"*. Bản cài giữ cấu tr�
 Sau khi có biểu đồ của mình, khối TradingView chuyển xuống dưới và **mặc định đóng**:
 với mã VN nó chỉ hiện câu chặn (mục 11.1), nên mở sẵn là chiếm chỗ vô ích. Nút
 **Mở trên TradingView ↗** vẫn giữ vì đó là đường dùng được thật.
+
+---
+
+## 13. Màn Tin tức — RSS
+
+Trạng thái: **ĐÃ CÀI** — verify 104 OK / 0 LỆCH, fetch thật từ cả ba nguồn.
+
+### 13.1 Ba nguồn mặc định — đã thử thật
+
+Thử từ trong container ngày 01/08/2026, cả ba đều là **RSS 2.0** có đủ
+`title / link / description / pubDate / guid`:
+
+| Nguồn | URL | HTTP | Số item |
+|---|---|---|---|
+| CafeF chứng khoán | `https://cafef.vn/thi-truong-chung-khoan.rss` | 200 | 50 |
+| Vietstock chứng khoán | `https://vietstock.vn/144/chung-khoan.rss` | 200 | 30 |
+| VnEconomy tài chính | `https://vneconomy.vn/tai-chinh.rss` | 200 | 50 |
+
+Ba điểm KHÁC NHAU giữa các nguồn, parser phải chịu được:
+
+- **CafeF dùng năm 2 chữ số**: `Sat, 01 Aug 26 16:21:00 +0700`. Không phải RFC-822 chuẩn.
+- **VnEconomy trả `GMT`**, Vietstock và CafeF trả `+0700`. Phải quy về **một** múi giờ.
+- **Vietstock dùng `http://`** trong `link` và `guid`, hai nguồn kia dùng `https://`.
+
+Nguồn nào lỗi thì **bỏ qua nguồn đó**, không chặn cả màn — cùng nguyên tắc chuỗi
+nguồn giá ở mục 9.6.
+
+### 13.2 SQL
+
+```sql
+CREATE TABLE {$p}fin_news_items (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  guid         VARCHAR(191)    NOT NULL,   -- xem 13.3
+  source       VARCHAR(60)     NOT NULL,
+  title        VARCHAR(500)    NOT NULL,
+  link         VARCHAR(700)    NOT NULL,
+  published_at DATETIME        NULL,       -- GMT+7; null khi nguồn không cho pubDate
+  summary      VARCHAR(600)    NULL,
+  title_key    CHAR(40)        NOT NULL,   -- sha1 tiêu đề đã chuẩn hoá, xem 13.3
+  fetched_at   DATETIME        NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY uq_guid (guid),
+  KEY idx_pub (published_at),
+  KEY idx_title_key (title_key, published_at)
+) $charset;
+
+CREATE TABLE {$p}fin_news_feeds (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id    BIGINT UNSIGNED NOT NULL,
+  name       VARCHAR(120)    NOT NULL,
+  url        VARCHAR(500)    NOT NULL,
+  is_active  TINYINT(1)      NOT NULL DEFAULT 1,
+  created_at DATETIME        NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY uq_user_url (user_id, url),
+  KEY idx_user (user_id, is_active)
+) $charset;
+
+CREATE TABLE {$p}fin_news_flags (
+  user_id    BIGINT UNSIGNED NOT NULL,
+  news_id    BIGINT UNSIGNED NOT NULL,
+  flag       VARCHAR(20)     NOT NULL,
+  noted_at   DATETIME        NOT NULL,
+  PRIMARY KEY  (user_id, news_id)
+) $charset;
+```
+
+**`fin_news_flags` là bảng THÊM so với đề bài**, và bắt buộc phải có: `fin_news_items`
+không có `user_id` vì nó là dữ liệu **tham chiếu dùng chung** — nhiều user cùng đọc một
+tin. Nhét cột `flag` vào đó thì cờ của người này đè cờ của người khác.
+
+Bảng này không có `user_id` riêng cho `news_id`, nên **mọi endpoint đụng tới nó phải
+lọc theo user hiện tại** — nguyên tắc mục 0.2.
+
+### 13.3 Chống trùng — nói rõ cái gì chặn được, cái gì không
+
+**`guid` UNIQUE chặn được:** cùng một tin của **cùng một nguồn** bị nạp lại qua nhiều
+lần fetch. Đây là ca thường gặp nhất vì cron chạy 2 giờ một lần trên feed 50 item.
+
+**`guid` KHÔNG chặn được:** cùng một tin do **hai nguồn khác nhau** đăng — mỗi nơi có
+guid riêng của mình. Đề bài viết "guid chống trùng khi nhiều nguồn đăng cùng tin";
+điều đó **không đúng về mặt kỹ thuật** và cần nói rõ, nếu không sẽ tưởng đã xử lý xong.
+
+Bù bằng `title_key` = `sha1` của tiêu đề đã chuẩn hoá (bỏ dấu câu, gộp khoảng trắng,
+hạ chữ thường). Khi chèn, nếu **đã có** tin cùng `title_key` trong **3 ngày** gần đó
+thì bỏ qua tin mới.
+
+Giới hạn phải chấp nhận: cách này chỉ bắt được tiêu đề **giống hệt** sau chuẩn hoá. Hai
+nguồn viết khác chữ về cùng một sự việc thì vẫn hiện hai lần. **Đó là cố ý** — gộp theo
+độ tương tự là đoán ngữ nghĩa, mà thà để trùng còn hơn gộp nhầm hai tin khác nhau.
+
+**`guid` dài quá 191 ký tự** thì lưu `sha1:<hash>` thay cho chuỗi gốc, vì UNIQUE index
+trên utf8mb4 không vượt được 191 ký tự. Cột `link` vẫn giữ URL đầy đủ.
+
+### 13.4 Lọc theo mã đang nắm giữ
+
+Danh sách mã lấy từ **engine A** (`by_sym` có `shares > 0`) — cùng một nguồn với thẻ
+"Số mã đang nắm giữ" ở màn Giao dịch, không tự đếm lại.
+
+Khớp bằng **chuỗi đơn giản**, không đoán ngữ nghĩa:
+
+```
+/(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])/u   trên tiêu đề + tóm tắt, KHÔNG hạ chữ thường
+```
+
+Biên phải là `\p{L}\p{N}` — **mọi** chữ và số, kể cả chữ thường và chữ có dấu — chứ
+**không phải** `[A-Z0-9]`. Bản cài đầu dùng `[A-Z0-9]` và nó cho `HPGas` khớp mã `HPG`,
+vì chữ `a` viết thường không nằm trong lớp nên lookahead lọt. Bộ verify bắt được.
+
+Hai lớp chống gán nhầm:
+
+1. **Biên ký tự**: `HPG` không khớp trong `HPGas`, `GAS` không khớp trong `GAS1`.
+2. **Phân biệt chữ hoa**: không hạ chữ thường trước khi khớp, nên từ tiếng Anh viết
+   thường như `gas` không khớp mã `GAS`. Đây là lý do chính của quyết định
+   phân-biệt-hoa-thường — mã VN luôn viết hoa trong bài báo.
+
+Hệ quả chấp nhận: tin viết mã sai kiểu (`Hpg`) sẽ **bị sót**. Đúng yêu cầu "thà sót
+còn hơn gán nhầm".
+
+Khớp tính **lúc đọc**, không lưu vào bảng: danh mục thay đổi thì kết quả phải thay theo.
+
+Hai tab: **Tất cả** và **Danh mục của tôi**. Tab thứ hai rỗng thì nói rõ vì sao — chưa
+nắm mã nào, hay đang nắm nhưng chưa có tin nào nhắc tới.
+
+### 13.5 Endpoint
+
+```
+GET    fin/news[?scope=all|portfolio&limit=]
+       -> { items:[{id, source, title, link, published_at, summary, syms[], flag}],
+            held[], coverage:{total, matched, from, to}, feeds_health[] }
+POST   fin/news/fetch          -> chạy tay đợt nạp, trả kết quả TỪNG NGUỒN
+GET    fin/news-feeds          -> [{id, name, url, is_active, is_default}]
+POST   fin/news-feeds          body {name, url}            (thêm nguồn của user)
+DELETE fin/news-feeds/{id}     -> {deleted:1}
+PUT    fin/news/{id}/flag      body {flag:'save'|'watch'|''}  ('' = bỏ cờ)
+```
+
+`POST fin/news/fetch` trả **từng nguồn một dòng** `{name, url, ok, http, items, inserted,
+skipped_guid, skipped_title, error}` — nguồn chết phải thấy được, không gộp thành một số
+tổng.
+
+### 13.6 KHÔNG LÀM — và lý do
+
+**Số liệu vĩ mô (vàng, dầu, DXY, OMO).** RSS chỉ có tiêu đề và tóm tắt; các số này cần
+nguồn dữ liệu **có cấu trúc** riêng cho từng chỉ số. Moi số từ câu văn tiếng Việt thì
+sai nhiều và không kiểm được. Để trống, ghi rõ "chưa có nguồn" — cùng nguyên tắc cột KL
+ở mục 10.4.
+
+**Nhãn Tốt / Xấu / Trung tính tự động.** Prototype hardcode các nhãn này. Phân loại tự
+động từ tiêu đề sẽ sai nhiều, mà đây là số liệu đi vào **quyết định mua bán** — gán sai
+tệ hơn không gán. Thay bằng: **user tự gắn cờ** (`fin_news_flags`).
+
+**Badge chủ đề của thiết kế** (`Vĩ mô` / `Doanh nghiệp` / `Ngành` / `Dòng tiền` /
+`Nhận định`) cũng là phân loại tự động, nên **thay bằng tên nguồn** — số liệu có thật,
+không phải suy đoán. Mã khớp được hiện thành badge riêng.
+
+### 13.7 Bản quyền
+
+Chỉ lưu và hiện: **tiêu đề**, **tóm tắt ngắn từ chính RSS** (cắt còn 600 ký tự, đã
+`strip_tags`), và **link về nguồn**. **KHÔNG** tải toàn văn bài báo, không lưu ảnh.
+Mỗi thẻ tin có link mở bài gốc ở tab mới.
+
+### 13.8 Cron và dọn bảng
+
+WP-Cron `gdsfin_news_fetch`, chu kỳ **2 giờ** (thêm lịch `gdsfin_two_hours` qua filter
+`cron_schedules` — WP không có sẵn mốc 2 giờ). Kèm nút **Làm mới** gọi
+`POST fin/news/fetch`.
+
+Sau mỗi đợt nạp, **xoá tin có `published_at` cũ hơn 30 ngày** (thiếu `published_at` thì
+xét `fetched_at`). Xoá luôn cờ trỏ tới tin đã xoá để không còn dòng mồ côi.
+
+Cảnh báo WP-Cron vẫn như mục 8.11: nó chạy nhờ có người truy cập, site vắng khách thì
+cron trễ. Nút Làm mới là đường chắc chắn.
+
+### 13.9 Nguồn mặc định vs nguồn của user
+
+Ba nguồn ở 13.1 là **hằng số trong code**, luôn có, không sửa được — để màn không bao
+giờ rỗng vì user xoá hết nguồn. User thêm nguồn riêng vào `fin_news_feeds`; các nguồn đó
+xoá được và bật/tắt được. Endpoint trả `is_default` để UI biết dòng nào không cho xoá.
+
+### 13.10 Kết quả fetch thật — lần nạp đầu
+
+| Nguồn | HTTP | Đọc được | Chèn mới | Trùng guid |
+|---|---|---|---|---|
+| CafeF · Chứng khoán | 200 | 50 | 50 | 0 |
+| Vietstock · Chứng khoán | 200 | 30 | 29 | **1** |
+| VnEconomy · Tài chính | 200 | 50 | 50 | 0 |
+
+Tổng **129 tin**. Vietstock có 1 trùng ngay trong lần nạp đầu — hai item **cùng feed**
+mang cùng `guid`; `UNIQUE` chặn đúng.
+
+Nạp lại ngay lần hai: **chèn 0**, toàn bộ bị `guid` chặn, số tin trong bảng không đổi.
+Đó là chốt kiểm cho việc cron chạy 2 giờ/lần không làm bảng phình.
+
+### 13.11 Một lỗi đã sửa — biên khớp mã
+
+Bản cài đầu dùng `(?<![A-Z0-9])SYM(?![A-Z0-9])`. Bộ verify bắt được: `HPGas` **khớp**
+mã `HPG`, vì chữ `a` viết thường không nằm trong `[A-Z0-9]` nên lookahead lọt. Đúng
+loại gán nhầm mà 13.4 đặt ra để tránh.
+
+Đã sửa thành `(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])/u`. Sau khi sửa, 5 ca chống gán
+nhầm đều đạt: `HPGas`, `gas` (chữ thường), `GAS1`, `Hpg` (sai kiểu), danh mục rỗng.
+
+### 13.12 Đã đối chiếu trên màn thật
+
+- Tab **Tất cả**: 129 tin thật, badge tên nguồn, mốc "N giờ trước", tóm tắt 3 dòng
+- Tab **Danh mục của tôi**: đang nắm CTG/KDH/NVL, **không tin nào** nhắc tới, nên hiện
+  đúng câu giải thích vì sao rỗng thay vì để trắng. Bộ khớp đã được chứng minh chạy
+  bằng cách thử với mã có thật trong tin hôm đó (`NLG`, `HPX`, `DIG`) — 6 tin khớp.
+- Panel **Nguồn tin**: 3 nguồn, `last_ok_at` và số tin từng nguồn
+- Gắn cờ **Lưu** ghi được xuống `fin_news_flags` và viền thẻ đổi theo
+- Màn **Cài đặt**: thêm nguồn (thử ngay, báo kết quả), nguồn mặc định khoá không xoá
+- Cả hai theme Sáng / Tối

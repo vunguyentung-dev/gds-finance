@@ -87,6 +87,12 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - GET|POST   fin/accounts · GET fin/cash
 - GET        fin/overview
 
+## Endpoint tin tức (mục 13 của docs/api-spec.md)
+- GET      fin/news[?scope=all|portfolio&limit=]  lọc theo mã đang nắm (engine A)
+- POST     fin/news/fetch        nạp tay, trả kết quả TỪNG nguồn
+- PUT      fin/news/{id}/flag    body {flag:'save'|'watch'|''}  cờ do USER tự gắn
+- GET|POST fin/news-feeds · DELETE fin/news-feeds/{id}
+
 ## BA ENGINE — không hợp nhất, mọi số hiện ra phải có NHÃN ENGINE
 - A bình quân gia quyền -> by_sym, cards
 - B FIFO khớp lô đã về  -> flow, footer
@@ -171,6 +177,16 @@ chúng chỉ cần giá đóng cửa, cái thiếu là SỐ PHIÊN (RSI 15, MA20
 hiệu 34). Thiếu phiên thì trả null + "cần N phiên, đang có M", KHÔNG bịa số.
 Không vẽ nến (thiếu mở/cao/thấp), không nội suy phiên trống.
 Số RSI/MACD trong ảnh thiết kế là chuỗi hardcode.
+
+## Màn Tin tức — xem api-spec mục 13
+Ba nguồn RSS mặc định là HẰNG SỐ trong code, không xoá được; user thêm nguồn riêng
+ở màn Cài đặt. Nguồn lỗi bị bỏ qua, KHÔNG chặn cả màn. Cron 2 giờ + nút Làm mới,
+xoá tin cũ hơn 30 ngày.
+BẢN QUYỀN: chỉ tiêu đề + tóm tắt từ RSS + link về nguồn. KHÔNG lấy toàn văn.
+KHÔNG có nhãn Tốt/Xấu tự động và KHÔNG có số liệu vĩ mô — user tự gắn cờ.
+Badge trên thẻ tin là TÊN NGUỒN, không phải chủ đề suy đoán.
+Khớp mã: biên phải là \p{L}\p{N} chứ KHÔNG phải [A-Z0-9] — dùng [A-Z0-9] thì
+"HPGas" khớp mã "HPG". Phân biệt hoa/thường để "gas" không khớp "GAS".
 
 ## Design token (theme Sáng)
 --bg #faf9f7 · --panel #ffffff · --sidebar #ffffff · --border #eceae6
