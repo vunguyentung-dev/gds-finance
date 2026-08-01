@@ -159,6 +159,14 @@ Cột KL để trống: fin_quote_history không có cột volume.
 Số Trần/Sàn trong ảnh thiết kế là hardcode và tự mâu thuẫn — KHÔNG sửa code cho
 khớp ảnh, xem bảng đối chiếu ở mục 10.1.
 
+## Màn Phân tích — xem api-spec mục 11
+Nhúng widget TradingView. TradingView KHÔNG cấp phép dữ liệu HOSE/HNX/UPCOM cho
+widget nhúng: mã đúng, tích hợp đúng (NASDAQ:AAPL dựng bình thường), nhưng biểu đồ
+bị thay bằng "Mã giao dịch này chỉ có trên TradingView". KHÔNG phải lỗi code —
+đừng đi sửa tên mã hay cấu hình widget. Đường dùng được: nút Mở trên TradingView.
+Ứng dụng KHÔNG tự tính RSI/MACD/MA: chỉ có giá đóng cửa, không đủ dữ liệu.
+Số RSI/MACD trong ảnh thiết kế cũng là chuỗi hardcode.
+
 ## Design token (theme Sáng)
 --bg #faf9f7 · --panel #ffffff · --sidebar #ffffff · --border #eceae6
 --fg #18181b · --muted #71717a · --muted2 #a1a1aa · --chip #e4e4e7

@@ -1893,3 +1893,82 @@ Màn thêm hai cột không có trong ảnh, đều là bắt buộc:
 Bảng giá lấy mã từ `fin_symbols`, **không tự sinh**. Sàn là trường bắt buộc vì biên
 độ phụ thuộc nó. Tab: VN30 / HOSE / HNX / Tất cả, cộng tab cho sàn nào có mã mà không
 nằm trong ba tab gốc — để mã UPCOM không bị ẩn.
+
+---
+
+## 11. Màn Phân tích — nhúng TradingView
+
+Trạng thái: **ĐÃ CÀI**, nhưng **bị chặn dữ liệu ở phía TradingView** — xem 11.1.
+
+### 11.1 TradingView KHÔNG cấp phép dữ liệu HOSE / HNX / UPCOM cho widget nhúng
+
+Kiểm ngày 01/08/2026, trên hai loại widget khác nhau:
+
+| Mã thử | Widget | Kết quả |
+|---|---|---|
+| `HOSE:FPT` | `advanced-chart` | “Mã giao dịch này chỉ có trên TradingView” |
+| `HOSE:FPT` | `mini-symbol-overview` | Hiện đúng tên **“FPT · CÔNG TY CỔ PHẦN FPT”** rồi chặn biểu đồ, cùng câu trên |
+| `HOSE:VNINDEX` | `advanced-chart` | Cùng câu chặn |
+| `NASDAQ:AAPL` | `advanced-chart` | **Dựng bình thường** |
+
+Ba kết luận từ bảng này:
+
+1. **Tên mã đúng.** `mini-symbol-overview` tra ra được tên công ty tiếng Việt, nên
+   `HOSE:FPT` là định danh hợp lệ — không phải lỗi ghép tiền tố sàn.
+2. **Tích hợp đúng.** `NASDAQ:AAPL` dựng được bằng chính đoạn nhúng đó.
+3. Vậy nguyên nhân là **bản quyền dữ liệu**, không phải lỗi kỹ thuật. Không có cấu
+   hình nào của widget mở được cái này.
+
+### 11.2 Hệ quả và cách đang xử lý
+
+Màn vẫn cài đầy đủ và sẽ hoạt động nếu về sau có nguồn được cấp phép, nhưng **hiện tại
+với mã Việt Nam thì khối biểu đồ chỉ hiện câu chặn của TradingView**. Màn xử lý bằng
+cách nói thẳng:
+
+- Băng đỏ đầu màn nêu đúng giới hạn này kèm bằng chứng, để không ai mất thời gian đi
+  sửa code hay đổi tên mã
+- Mỗi mã sàn VN có thêm dòng nhắc ngay trong thẻ biểu đồ
+- Nút **Mở trên TradingView ↗** dẫn tới `tradingview.com/chart/?symbol=…` — trên chính
+  trang của họ thì dữ liệu VN xem được
+
+**Chưa quyết:** dùng nhà cung cấp khác cho biểu đồ VN, hay tự dựng biểu đồ từ
+`fin_quote_history`. Tự dựng thì hiện chỉ có **giá đóng cửa** nhập tay, không có khối
+lượng và không có dữ liệu trong phiên.
+
+### 11.3 Không tự tính chỉ báo
+
+Ứng dụng chỉ lưu giá đóng cửa theo phiên → **không đủ** để tính RSI, MACD, MA ra số
+đáng tin. Màn **không** hiện chỉ báo nào do mình tính.
+
+`RSI 61,2` và `MACD +1,24` trong ảnh thiết kế là **chuỗi cố định viết thẳng trong
+HTML** của prototype (dòng 505-506), không phải kết quả tính — không có công thức để
+port, giống hệt ca Trần/Sàn ở mục 10.1.
+
+### 11.4 Hai nguồn số trên cùng một màn — bắt buộc ghi nhãn
+
+Biểu đồ là dữ liệu TradingView; lãi/lỗ ở màn Giao dịch và Tổng quan là giá trong
+`fin_quote_history`. **Hai nguồn khác nhau, có thể lệch nhau.** Vì vậy màn có khối
+**“Giá trong sổ của bạn”** đặt ngay dưới biểu đồ, viền nhấn, ghi rõ đây mới là giá
+dùng để tính lãi/lỗ — kèm nguồn theo mục 9.1.
+
+Khối này phân biệt **ba** ca, không được gộp:
+
+| Ca | Hiện gì |
+|---|---|
+| Mã có trong `fin_symbols` | Khớp · TC · Trần/Sàn phiên kế tiếp · nguồn giá |
+| Chỉ số (`VNINDEX`, `VN30`, `HNXINDEX`) | “là chỉ số, ứng dụng không lưu giá cho nó” |
+| Mã cổ phiếu chưa khai | “chưa có trong danh sách theo dõi, thêm ở màn Bảng giá” |
+
+Gộp hai ca cuối lại thì màn báo **“FPT là chỉ số”** — nói sai về mã của người dùng.
+Đây là lỗi đã mắc và đã sửa khi đối chiếu trên màn thật.
+
+### 11.5 Phụ thuộc ngoài
+
+Script và iframe tải từ `s3.tradingview.com`, tức trình duyệt người dùng gọi ra ngoài
+và TradingView biết đang xem mã nào. Không có mạng, hoặc bị tường lửa / tiện ích chặn
+quảng cáo ngăn, thì widget không hiện — component tự phát hiện (không thấy `iframe`
+sau 8 giây) và báo, thay vì để một ô trống không giải thích.
+
+**Giới hạn của phép phát hiện này:** `iframe` khác origin nên không đọc được nội dung.
+Widget bị **chặn dữ liệu** vẫn tạo `iframe`, nên vẫn bị tính là “tải được”. Đó là lý
+do 11.1 phải nói bằng băng thông báo tĩnh chứ không dò tự động được.
