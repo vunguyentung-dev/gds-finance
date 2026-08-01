@@ -19,8 +19,8 @@ interface GDSFIN_Quote_Source {
 }
 
 /**
- * Nguồn mặc định: CHƯA CẤU HÌNH. Không trả giá nào.
- * Nhà cung cấp thật cắm vào bằng filter 'gdsfin_quote_source'.
+ * Nguồn tham chiếu để test / làm mẫu. KHÔNG được dùng làm mặc định:
+ * chuỗi nguồn rỗng nghĩa là "chưa cấu hình", xem GDSFIN_Market::sources().
  */
 class GDSFIN_Quote_Source_None implements GDSFIN_Quote_Source {
     public function name(): string { return 'auto:none'; }
@@ -117,6 +117,32 @@ class GDSFIN_Market {
         return $d->format('Y-m-d');
     }
 
+    /**
+     * Số PHIÊN GIAO DỊCH giữa $from (không tính) và $to (tính) — mục 9.4.
+     * Đếm theo phiên chứ không theo ngày lịch: nghỉ lễ dài thì đếm ngày lịch sẽ
+     * báo động sai. Dùng chung logic bỏ T7/CN + fin_market_holidays với T+2.
+     */
+    public static function sessions_between(string $from, string $to): int {
+        if ($from >= $to) return 0;
+        $h = GDSFIN_Util::holidays();
+        $d = new DateTimeImmutable($from . ' 00:00:00', GDSFIN_Util::tz());
+        $e = new DateTimeImmutable($to . ' 00:00:00', GDSFIN_Util::tz());
+        $n = 0;
+        while ($d < $e && $n < 400) {
+            $d  = $d->modify('+1 day');
+            $wd = (int) $d->format('N');
+            if ($wd < 6 && !isset($h[$d->format('Y-m-d')])) $n++;
+        }
+        return $n;
+    }
+
+    /** current (0 phiên) · recent (1-2) · stale (>=3) · none (chưa có giá) — mục 9.4. */
+    public static function staleness_of(?int $sessions_behind): string {
+        if ($sessions_behind === null) return 'none';
+        if ($sessions_behind <= 0) return 'current';
+        return $sessions_behind >= 3 ? 'stale' : 'recent';
+    }
+
     /** Các mã user đang thực sự nắm giữ (KL ròng > 0), suy từ sổ lệnh. */
     public static function held_symbols(int $uid): array {
         global $wpdb;
@@ -155,6 +181,9 @@ class GDSFIN_Market {
         ]);
         register_rest_route('fin/v1', '/fin/quotes/manual/(?P<sym>[A-Za-z0-9]+)/(?P<date>\d{4}-\d{2}-\d{2})', [
             'methods' => 'DELETE', 'callback' => [self::class, 'delete_manual'], 'permission_callback' => $manage,
+        ]);
+        register_rest_route('fin/v1', '/fin/quotes/health', [
+            'methods' => 'GET', 'callback' => [self::class, 'health'], 'permission_callback' => $view,
         ]);
         register_rest_route('fin/v1', '/fin/quotes/fetch', [
             'methods' => 'POST', 'callback' => [self::class, 'fetch_now'], 'permission_callback' => $manage,
@@ -218,28 +247,41 @@ class GDSFIN_Market {
      * Giá suy từ fin_quote_history: last = close của MAX(trade_date),
      * prev_close = close của phiên liền trước. Không có bảng "giá mới nhất" riêng.
      */
-    public static function quotes_for(array $syms): array {
+    /**
+     * Giá suy từ fin_quote_history, kèm NGUỒN GỐC theo mục 9.2.
+     * Trả `close_price` (không phải `close`) — đổi tên có chủ ý để mọi nơi hiển thị
+     * giá buộc phải đi qua hợp đồng có nguồn, không lấy lẻ một con số rồi giấu nguồn.
+     */
+    public static function quotes_for(array $syms, ?string $as_of_session = null): array {
         global $wpdb;
-        $t = self::t_hist();
+        $t   = self::t_hist();
+        $ltd = $as_of_session ?: self::last_trading_day();
         $out = [];
         foreach ($syms as $sym) {
             $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT trade_date, close, source FROM $t WHERE sym = %s ORDER BY trade_date DESC LIMIT 2",
+                "SELECT trade_date, close, source, updated_at FROM $t
+                  WHERE sym = %s ORDER BY trade_date DESC LIMIT 2",
                 $sym
             ), ARRAY_A);
             if (!$rows) { $out[$sym] = null; continue; }
             $cur  = $rows[0];
             $prev = $rows[1] ?? null;
             $change = $prev ? bcsub($cur['close'], $prev['close'], self::S) : null;
+            $behind = self::sessions_between($cur['trade_date'], $ltd);
             $out[$sym] = [
-                'trade_date' => $cur['trade_date'],
-                'close'      => GDSFIN_Util::money_out($cur['close']),
-                'prev_close' => $prev ? GDSFIN_Util::money_out($prev['close']) : null,
-                'change'     => $change === null ? null : GDSFIN_Util::money_out($change),
-                'change_pct' => ($prev && bccomp($prev['close'], '0', self::S) > 0)
+                'close_price' => GDSFIN_Util::money_out($cur['close']),
+                'prev_close'  => $prev ? GDSFIN_Util::money_out($prev['close']) : null,
+                'change'      => $change === null ? null : GDSFIN_Util::money_out($change),
+                'change_pct'  => ($prev && bccomp($prev['close'], '0', self::S) > 0)
                     ? GDSFIN_Util::pct_out(bcmul(bcdiv($change, $prev['close'], self::S), '100', self::S))
                     : null,
-                'source'     => $cur['source'],
+                // --- nguồn gốc, mục 9.2: UI không được hiện giá mà giấu mấy trường này ---
+                'source'          => $cur['source'],
+                'is_manual'       => $cur['source'] === 'manual',
+                'fetched_at'      => $cur['updated_at'],
+                'trade_date'      => $cur['trade_date'],
+                'sessions_behind' => $behind,
+                'staleness'       => self::staleness_of($behind),
             ];
         }
         return $out;
@@ -259,7 +301,7 @@ class GDSFIN_Market {
         $missing = [];
         foreach ($quotes as $sym => $q) {
             if ($q === null) { $missing[] = $sym; continue; }
-            if ($q['trade_date'] < $ltd) $behind[] = $sym;
+            if ($q['sessions_behind'] > 0) $behind[] = $sym . ' (' . $q['sessions_behind'] . ' phiên)';
         }
         $reasons = [];
         if ($missing) $reasons[] = 'chưa có giá: ' . implode(', ', $missing);
@@ -282,15 +324,17 @@ class GDSFIN_Market {
         $to   = GDSFIN_Util::is_date((string) $req->get_param('to')) ? $req->get_param('to') : GDSFIN_Util::today();
 
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT trade_date, close, source FROM " . self::t_hist() . "
+            "SELECT trade_date, close, source, updated_at FROM " . self::t_hist() . "
               WHERE sym = %s AND trade_date BETWEEN %s AND %s
               ORDER BY trade_date ASC LIMIT 3000", $sym, $from, $to
         ), ARRAY_A) ?: [];
 
         return rest_ensure_response(['sym' => $sym, 'points' => array_map(fn($r) => [
-            'trade_date' => $r['trade_date'],
-            'close'      => GDSFIN_Util::money_out($r['close']),
-            'source'     => $r['source'],
+            'trade_date'  => $r['trade_date'],
+            'close_price' => GDSFIN_Util::money_out($r['close']),
+            'source'      => $r['source'],
+            'is_manual'   => $r['source'] === 'manual',
+            'fetched_at'  => $r['updated_at'],
         ], $rows)]);
     }
 
@@ -315,8 +359,8 @@ class GDSFIN_Market {
                 'sym' => $sym,
                 'qty' => GDSFIN_Util::qty_out($qty),
                 'last_known' => $last ? [
-                    'trade_date' => $last['trade_date'],
-                    'close'      => GDSFIN_Util::money_out($last['close']),
+                    'trade_date'  => $last['trade_date'],
+                    'close_price' => GDSFIN_Util::money_out($last['close']),
                 ] : null,
             ];
         }
@@ -388,10 +432,68 @@ class GDSFIN_Market {
 
     /* ===================== NẠP GIÁ TỰ ĐỘNG ===================== */
 
-    private static function source(): GDSFIN_Quote_Source {
-        /** Nhà cung cấp thật cắm vào bằng filter này. */
-        $src = apply_filters('gdsfin_quote_source', new GDSFIN_Quote_Source_None());
-        return $src instanceof GDSFIN_Quote_Source ? $src : new GDSFIN_Quote_Source_None();
+    const HEALTH_OPTION = 'gdsfin_quote_source_health';
+
+    /**
+     * CHUỖI nguồn theo thứ tự ưu tiên — mục 9.6(3).
+     * Cắm nhà cung cấp bằng filter 'gdsfin_quote_sources', trả mảng các đối tượng
+     * thoả GDSFIN_Quote_Source. Mảng rỗng = chưa cấu hình nguồn tự động, lúc đó chỉ
+     * còn đường nhập tay.
+     *
+     * @return GDSFIN_Quote_Source[]
+     */
+    private static function sources(): array {
+        $list = apply_filters('gdsfin_quote_sources', []);
+        $out  = [];
+        foreach ((array) $list as $src) {
+            if ($src instanceof GDSFIN_Quote_Source) $out[] = $src;
+        }
+        return $out;
+    }
+
+    /** Ghi nhận một lần gọi nguồn để chẩn đoán khi CẢ CHUỖI cùng chết (mục 9.6). */
+    private static function record_health(string $name, bool $ok, ?string $error = null) {
+        $all = get_option(self::HEALTH_OPTION, []);
+        if (!is_array($all)) $all = [];
+        $h = $all[$name] ?? ['last_ok_at' => null, 'last_error_at' => null, 'last_error' => null, 'attempts' => []];
+        $now = GDSFIN_Util::now_mysql();
+        if ($ok) $h['last_ok_at'] = $now;
+        else { $h['last_error_at'] = $now; $h['last_error'] = $error; }
+
+        // giữ 7 ngày để tính ok_rate_7d
+        $h['attempts'][] = ['at' => $now, 'ok' => $ok];
+        $cut = GDSFIN_Util::now()->modify('-7 day')->format('Y-m-d H:i:s');
+        $h['attempts'] = array_values(array_filter($h['attempts'], fn($a) => $a['at'] >= $cut));
+
+        $all[$name] = $h;
+        update_option(self::HEALTH_OPTION, $all, false);
+    }
+
+    public static function health(WP_REST_Request $req) {
+        $all = get_option(self::HEALTH_OPTION, []);
+        if (!is_array($all)) $all = [];
+        $names = array_map(fn($s) => $s->name(), self::sources());
+        foreach ($names as $n) if (!isset($all[$n])) $all[$n] = ['last_ok_at' => null, 'last_error_at' => null, 'last_error' => null, 'attempts' => []];
+
+        $out = [];
+        foreach ($all as $name => $h) {
+            $tries = $h['attempts'] ?? [];
+            $ok    = count(array_filter($tries, fn($a) => !empty($a['ok'])));
+            $out[] = [
+                'source'        => $name,
+                'configured'    => in_array($name, $names, true),
+                'last_ok_at'    => $h['last_ok_at'] ?? null,
+                'last_error_at' => $h['last_error_at'] ?? null,
+                'last_error'    => $h['last_error'] ?? null,
+                'attempts_7d'   => count($tries),
+                'ok_rate_7d'    => count($tries) ? GDSFIN_Util::pct_out(bcmul(bcdiv((string) $ok, (string) count($tries), self::S), '100', self::S)) : null,
+            ];
+        }
+        return rest_ensure_response([
+            'sources_configured' => count($names),
+            'order'              => $names,
+            'health'             => $out,
+        ]);
     }
 
     /**
@@ -410,25 +512,46 @@ class GDSFIN_Market {
         }
         if (!$syms) return ['trade_date' => $date, 'updated' => 0, 'skipped_manual' => 0, 'failed' => [], 'error' => null];
 
-        $src = self::source();
-        try {
-            $closes = $src->fetch_closes($syms, $date);
-        } catch (Throwable $e) {
-            error_log('[gdsfin] nạp giá thất bại: ' . $e->getMessage());
+        $sources = self::sources();
+        if (!$sources) {
+            $msg = 'Chưa cấu hình nguồn giá tự động (filter gdsfin_quote_sources rỗng). Dùng nhập tay để bù.';
+            error_log('[gdsfin] ' . $msg);
             return [
                 'trade_date' => $date, 'updated' => 0, 'skipped_manual' => 0,
-                'failed' => $syms, 'error' => $e->getMessage(),
+                'failed' => $syms, 'error' => $msg, 'tried' => [],
             ];
+        }
+
+        // Duyệt chuỗi theo thứ tự ưu tiên; nguồn ĐẦU TIÊN trả giá hợp lệ thì thắng.
+        $won   = [];   // sym => ['close'=>..., 'source'=>...]
+        $tried = [];
+        foreach ($sources as $src) {
+            $name = $src->name();
+            $need = array_values(array_diff($syms, array_keys($won)));
+            if (!$need) break;
+            try {
+                $got = $src->fetch_closes($need, $date);
+                self::record_health($name, true);
+                $tried[] = ['source' => $name, 'asked' => count($need), 'ok' => true, 'error' => null];
+            } catch (Throwable $e) {
+                error_log("[gdsfin] nguồn $name lỗi: " . $e->getMessage());
+                self::record_health($name, false, $e->getMessage());
+                $tried[] = ['source' => $name, 'asked' => count($need), 'ok' => false, 'error' => $e->getMessage()];
+                continue;                       // thử nguồn kế tiếp
+            }
+            foreach ($need as $sym) {
+                $c = $got[$sym] ?? null;
+                if ($c === null || !is_numeric($c) || bccomp((string) $c, '0', self::S) <= 0) continue;
+                $won[$sym] = ['close' => (string) $c, 'source' => $name];
+            }
         }
 
         $t = self::t_hist();
         $updated = 0; $skipped = 0; $failed = [];
         foreach ($syms as $sym) {
-            $close = $closes[$sym] ?? null;
-            if ($close === null || !is_numeric($close) || bccomp((string) $close, '0', self::S) <= 0) {
-                $failed[] = $sym;
-                continue;
-            }
+            if (!isset($won[$sym])) { $failed[] = $sym; continue; }
+
+            // LUẬT CỐT LÕI: không ghi đè dòng nhập tay (mục 8.11)
             $existing = $wpdb->get_var($wpdb->prepare(
                 "SELECT source FROM $t WHERE sym = %s AND trade_date = %s", $sym, $date
             ));
@@ -438,11 +561,16 @@ class GDSFIN_Market {
                 "INSERT INTO $t (sym, trade_date, close, volume, source, entered_by, updated_at)
                  VALUES (%s, %s, %s, NULL, %s, NULL, %s)
                  ON DUPLICATE KEY UPDATE close=VALUES(close), source=VALUES(source), updated_at=VALUES(updated_at)",
-                $sym, $date, bcadd((string) $close, '0', 4), $src->name(), GDSFIN_Util::now_mysql()
+                $sym, $date, bcadd($won[$sym]['close'], '0', 4), $won[$sym]['source'], GDSFIN_Util::now_mysql()
             ));
             $updated++;
         }
-        return ['trade_date' => $date, 'updated' => $updated, 'skipped_manual' => $skipped, 'failed' => $failed, 'error' => null];
+        $all_dead = $tried && !array_filter($tried, fn($x) => $x['ok']);
+        return [
+            'trade_date' => $date, 'updated' => $updated, 'skipped_manual' => $skipped,
+            'failed' => $failed, 'error' => $all_dead ? 'Toàn bộ nguồn trong chuỗi đều lỗi' : null,
+            'tried' => $tried,
+        ];
     }
 
     public static function fetch_now(WP_REST_Request $req) {

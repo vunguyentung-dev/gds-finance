@@ -153,9 +153,10 @@ Gap chính 14-16px, padding thẻ 18px.
 - KHÔNG thay đổi cấu hình WordPress (template trang, settings, plugin khác)
 - Cần làm những việc trên: MÔ TẢ cho người dùng tự thực hiện
 
-## Nới phạm vi tạm thời — chỉ để cài mục 8 của api-spec
-Được sửa backend/ CHỈ để cài mục 8 (giá EOD, tiền mặt, ngành, cổ tức),
-trên nhánh riêng. Cài mục 8 TRƯỚC mục 7.
+## Nới phạm vi tạm thời — để cài mục 8 và 9 của api-spec
+Được sửa backend/ CHỈ để cài mục 8 (giá EOD, tiền mặt, ngành, cổ tức) và
+mục 9 (hiển thị nguồn giá), trên nhánh riêng. Mục 8 và 9 đã cài xong.
+Mục 7 (engine C) chưa cài.
 Bắt buộc: verify bằng dữ liệu thật đang có trong DB, in bảng đối chiếu
 "kỳ vọng vs thực tế". Không báo hoàn thành nếu còn dòng lệch.
 KHÔNG làm ĐỔI SỐ của endpoint fin/entries, fin/summary, và engine A/B

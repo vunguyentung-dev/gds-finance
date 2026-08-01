@@ -100,13 +100,13 @@ class GDSFIN_Overview {
             $qty = (string) $s['shares'];
             $cost = (string) $s['net_value'];
             $q   = $quotes[$sym] ?? null;
-            $priced = $q !== null && $q['close'] !== null;
+            $priced = $q !== null && $q['close_price'] !== null;
 
             if (!$priced) { $all_priced = false; $missing[] = $sym; }
 
             $mv = $fee = $upl = $upct = null;
             if ($priced) {
-                $mv  = bcmul($qty, $q['close'], self::S);
+                $mv  = bcmul($qty, $q['close_price'], self::S);
                 $fee = bcmul($mv, $exit_rate, self::S);
                 $upl = bcsub(bcsub($mv, $fee, self::S), $cost, self::S);
                 $upct = bccomp($cost, '0', self::S) > 0
@@ -115,7 +115,7 @@ class GDSFIN_Overview {
                 $mkt_total = bcadd($mkt_total, $mv, self::S);
 
                 if ($q['prev_close'] !== null) {
-                    $sess_pl   = bcadd($sess_pl, bcmul($qty, bcsub($q['close'], $q['prev_close'], self::S), self::S), self::S);
+                    $sess_pl   = bcadd($sess_pl, bcmul($qty, bcsub($q['close_price'], $q['prev_close'], self::S), self::S), self::S);
                     $sess_base = bcadd($sess_base, bcmul($qty, $q['prev_close'], self::S), self::S);
                 } else {
                     $all_have_prev = false;
@@ -138,14 +138,24 @@ class GDSFIN_Overview {
                 'qty'            => GDSFIN_Util::qty_out($qty),
                 'avg_cost'       => $s['avg_cost'],
                 'cost_value'     => GDSFIN_Util::money_out($cost),
-                'last'           => $priced ? $q['close'] : null,
-                'trade_date'     => $priced ? $q['trade_date'] : null,
+                /**
+                 * Nguồn gốc giá gói thành một khối — mục 9.1: UI không được hiện giá
+                 * mà giấu nguồn. Gói lại thì không ai lấy được số lẻ mà bỏ phần còn lại.
+                 */
+                'price'          => $priced ? [
+                    'close_price'     => $q['close_price'],
+                    'source'          => $q['source'],
+                    'is_manual'       => $q['is_manual'],
+                    'fetched_at'      => $q['fetched_at'],
+                    'trade_date'      => $q['trade_date'],
+                    'sessions_behind' => $q['sessions_behind'],
+                    'staleness'       => $q['staleness'],
+                ] : null,
                 'market_value'   => $mv  === null ? null : GDSFIN_Util::money_out($mv),
                 'exit_fee_est'   => $fee === null ? null : GDSFIN_Util::money_out($fee),
                 'unrealized_pl'  => $upl === null ? null : GDSFIN_Util::money_out($upl),
                 'unrealized_pct' => $upct,
                 'priced'         => $priced,
-                'price_source'   => $priced ? $q['source'] : null,
                 'spark'          => array_map(fn($r) => GDSFIN_Util::money_out($r['close']), $sp),
                 'spark_from'     => $sp ? $sp[0]['trade_date'] : null,
                 'spark_to'       => $sp ? $sp[count($sp) - 1]['trade_date'] : null,
@@ -258,6 +268,9 @@ class GDSFIN_Overview {
             'holdings'      => $holdings,
             'sector_alloc'  => $sector_alloc,
             'portfolio_series' => $series,
+            'series_stale'     => $series
+                ? GDSFIN_Market::staleness_of(GDSFIN_Market::sessions_between(end($series)['trade_date'], $ltd))
+                : 'none',
             'series_coverage'  => [
                 'points'        => count($series),
                 'trading_days'  => self::trading_days_between($from, $to),

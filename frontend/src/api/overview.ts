@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { PriceInfo, Staleness } from '../lib/price';
 
 /** Thẻ KPI: phân biệt "bằng 0" với "không biết" (mục 8.8). */
 export interface Card {
@@ -14,8 +15,8 @@ export interface Holding {
   qty: string;
   avg_cost: string | null;
   cost_value: string;
-  last: string | null;
-  trade_date: string | null;
+  /** Khối nguồn gốc giá — mục 9.2. null khi chưa có giá. */
+  price: PriceInfo | null;
   /** Chưa trừ phí bán. */
   market_value: string | null;
   exit_fee_est: string | null;
@@ -23,7 +24,6 @@ export interface Holding {
   unrealized_pl: string | null;
   unrealized_pct: string | null;
   priced: boolean;
-  price_source: string | null;
   spark: string[];
   spark_from: string | null;
   spark_to: string | null;
@@ -66,6 +66,7 @@ export interface Overview {
   holdings: Holding[];
   sector_alloc: SectorSlice[];
   portfolio_series: SeriesPoint[];
+  series_stale: Staleness;
   series_coverage: { points: number; trading_days: number; from: string; to: string };
   cash: CashSummary;
 }
@@ -73,7 +74,7 @@ export interface Overview {
 export interface QuoteGap {
   sym: string;
   qty: string;
-  last_known: { trade_date: string; close: string } | null;
+  last_known: { trade_date: string; close_price: string } | null;
 }
 
 export interface QuoteGaps {

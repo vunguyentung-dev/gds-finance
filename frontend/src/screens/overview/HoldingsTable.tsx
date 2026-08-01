@@ -1,5 +1,6 @@
 import type { Holding } from '../../api/overview';
-import { formatDateVN, formatVN, signedDong, toDong, toQty } from '../../lib/format';
+import { formatVN, signedDong, toDong, toQty } from '../../lib/format';
+import { formatSourceOnly, isDimmed, stalePrefix, staleTooltip } from '../../lib/price';
 
 interface Props {
   rows: Holding[];
@@ -55,20 +56,23 @@ export function HoldingsTable({ rows }: Props) {
                 <tr key={h.sym}>
                   <td>
                     <b>{h.sym}</b>
-                    {h.price_source === 'manual' && <span className="gf-ov-src">nhập tay</span>}
                     {h.name && <div className="gf-ov-symname">{h.name}</div>}
                   </td>
                   <td>{toQty(Number(h.qty))}</td>
                   <td className="muted">{h.avg_cost === null ? '—' : toDong(Number(h.avg_cost))}</td>
-                  <td>
-                    {h.last === null ? (
-                      <span className="gf-ov-nodata" title="Chưa có giá đóng cửa">
-                        —
-                      </span>
+                  {/* Giá TT LUÔN kèm nguồn và phiên — mục 9.1 */}
+                  <td title={staleTooltip(h.price)}>
+                    {h.price === null ? (
+                      <span className="gf-ov-nodata">chưa có giá</span>
                     ) : (
                       <>
-                        {toDong(Number(h.last))}
-                        {h.trade_date && <div className="gf-ov-symname">{formatDateVN(h.trade_date)}</div>}
+                        <div>
+                          {stalePrefix(h.price.staleness)}
+                          {toDong(Number(h.price.close_price))}
+                        </div>
+                        <div className={`gf-ov-src-line${isDimmed(h.price.staleness) ? ' dim' : ''}`}>
+                          {formatSourceOnly(h.price)}
+                        </div>
                       </>
                     )}
                   </td>
