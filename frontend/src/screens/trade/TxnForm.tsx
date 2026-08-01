@@ -13,6 +13,8 @@ type DraftField = 'sym' | 'date' | 'qty' | 'price';
 
 interface Props {
   draft: TxnDraft;
+  /** Khối chọn lô, chỉ dựng cho lệnh BÁN (api-spec 7.11). */
+  lotPicker: React.ReactNode;
   /** Mốc phí đang hiệu lực, để hiện chú thích như prototype (dòng 1466). */
   currentRate: RateTier | null;
   submitting: boolean;
@@ -24,6 +26,7 @@ interface Props {
 
 export function TxnForm({
   draft,
+  lotPicker,
   currentRate,
   submitting,
   error,
@@ -113,6 +116,8 @@ export function TxnForm({
           + Thêm
         </button>
       </div>
+
+      {draft.side === 'sell' && lotPicker}
 
       {error && <div className="gf-trade-error">{error}</div>}
     </div>

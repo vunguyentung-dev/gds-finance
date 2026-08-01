@@ -396,3 +396,464 @@
   background: var(--accent);
   cursor: pointer;
 }
+
+/* ---------- Engine C — chi tiết khớp lô (api-spec mục 7.5, 7.11) ---------- */
+
+.gf-trade-lots-cell {
+  width: 52px;
+  padding-left: 0 !important;
+}
+
+.gf-trade-lots-btn {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gf-trade-lots-btn:hover {
+  color: var(--accentInk);
+  border-color: var(--accent);
+}
+
+.gf-trade-lots-btn.on {
+  background: var(--accentSoft);
+  color: var(--accentInk);
+  border-color: transparent;
+}
+
+/* Panel dùng viền nhấn để thấy rõ đây là LỚP THÔNG TIN, không phải số tổng */
+.gf-lot {
+  border-color: var(--accent);
+}
+
+.gf-lot-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gf-lot-close {
+  border: none;
+  background: var(--chip);
+  color: var(--muted);
+  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+  cursor: pointer;
+  flex: none;
+}
+
+.gf-lot-engine {
+  display: inline-block;
+  background: var(--accentSoft);
+  color: var(--accentInk);
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.gf-lot-engine.sm {
+  font-size: 10px;
+  padding: 1px 7px;
+}
+
+.gf-lot-meta {
+  padding: 0 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.gf-lot-meta-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.gf-lot-warn,
+.gf-lot-err {
+  display: flex;
+  gap: 10px;
+  margin: 0 18px 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--downSoft, var(--chip));
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--sub, var(--muted));
+}
+
+.gf-lot-err {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gf-lot-err button {
+  border: none;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+  flex: none;
+}
+
+.gf-lot-warn b {
+  color: var(--down);
+}
+
+.gf-lot-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.gf-lot-col + .gf-lot-col {
+  border-left: 1px solid var(--border);
+}
+
+.gf-lot-col-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  padding: 14px 18px 0;
+}
+
+.gf-lot-table {
+  margin-top: 10px;
+}
+
+.gf-lot-table th,
+.gf-lot-table td {
+  font-size: 12px;
+}
+
+.gf-lot-lotline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gf-lot-order {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  flex: none;
+}
+
+.gf-lot-tag {
+  border-radius: 20px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.gf-lot-tag.manual {
+  background: var(--accentSoft);
+  color: var(--accentInk);
+}
+
+.gf-lot-tag.unsettled {
+  background: var(--chip);
+  color: var(--muted);
+}
+
+.gf-lot-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 18px;
+}
+
+.gf-lot-total-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.gf-lot-total-num {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.gf-lot-remain {
+  padding: 12px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gf-lot-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.gf-lot-line-label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.gf-lot-line-val {
+  text-align: right;
+  font-weight: 600;
+}
+
+.gf-lot-src {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.gf-lot-src.dim {
+  color: var(--muted2);
+}
+
+.gf-lot-nodata {
+  color: var(--muted2);
+  font-weight: 600;
+}
+
+/* Khối đối chiếu engine — mục 7.1: không được để số nào không có nhãn engine */
+.gf-lot-cmp {
+  border-top: 1px solid var(--border);
+  background: var(--panel2);
+  padding: 16px 18px;
+}
+
+.gf-lot-cmp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.gf-lot-cmp-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.gf-lot-cmp-hint {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted2);
+  margin-top: 2px;
+}
+
+.gf-lot-cmp-num {
+  font-size: 16px;
+  font-weight: 800;
+  margin-top: 5px;
+}
+
+.gf-lot-cmp-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin-top: 12px;
+}
+
+@media (max-width: 1100px) {
+  .gf-lot-cols {
+    grid-template-columns: 1fr;
+  }
+  .gf-lot-col + .gf-lot-col {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .gf-lot-cmp-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* ---------- Chọn lô thủ công cho lệnh BÁN (api-spec 7.11) ---------- */
+
+.gf-pick {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.gf-pick-msg {
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.gf-pick-msg.err {
+  color: var(--sub, var(--muted));
+  background: var(--downSoft, var(--chip));
+}
+
+.gf-pick-msg.err b {
+  color: var(--down);
+}
+
+.gf-pick-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.gf-pick-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gf-pick-sub {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 3px;
+  max-width: 70ch;
+}
+
+.gf-pick-modes {
+  display: flex;
+  gap: 4px;
+  background: var(--chip);
+  border-radius: 10px;
+  padding: 3px;
+  flex: none;
+}
+
+.gf-pick-mode {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gf-pick-mode.on {
+  background: var(--panel);
+  color: var(--accentInk);
+}
+
+.gf-pick-table {
+  margin-top: 0;
+}
+
+.gf-pick-table th,
+.gf-pick-table td {
+  font-size: 12px;
+}
+
+/* Lô mà chế độ tự động sẽ lấy — nhấn nhẹ để user thấy ngay mình đang ghim khác ở đâu */
+.gf-pick-auto-row {
+  background: var(--accentSoft);
+}
+
+.gf-pick-zero {
+  color: var(--muted2);
+}
+
+.gf-pick-input {
+  width: 92px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 12px;
+  text-align: right;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+}
+
+.gf-pick-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gf-pick-foot .warn {
+  color: var(--down);
+  font-weight: 700;
+}
+
+.gf-pick-foot .ok {
+  color: var(--up);
+  font-weight: 700;
+}
+
+.gf-pick-tally {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gf-pick-fill {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  flex: none;
+}
+
+.gf-pick-fill:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.gf-pick-note {
+  padding: 0 16px 14px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted2);
+}
+
+.gf-lot-engine.pin {
+  background: var(--chip);
+  color: var(--muted);
+}

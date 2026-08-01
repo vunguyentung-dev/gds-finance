@@ -73,6 +73,8 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - GET|POST   fin/stock-txns          POST nhận thêm lot_matches (tùy chọn, chỉ lệnh bán)
 - DELETE     fin/stock-txns/{id}     void lệnh mua đang bị khớp -> 409
 - GET        fin/stock-txns/{id}/lots  engine C: chi tiết lô + remaining (BẮT BUỘC đi kèm)
+- GET        fin/stock-txns/available-lots?sym=&on=  lô còn hàng chưa khớp, để ghim tay
+                                         thứ tự trả về = thứ tự engine C sẽ tự chọn
 - GET        fin/stock-summary       engine A (by_sym, cards) + engine B (flow, footer)
 - GET|POST   fin/rates
 - GET|POST   fin/symbols
@@ -177,7 +179,7 @@ Gap chính 14-16px, padding thẻ 18px.
 ## Nới phạm vi tạm thời — để cài mục 7, 8, 9 của api-spec
 Được sửa backend/ CHỈ để cài mục 7 (engine C khớp lô đích danh), mục 8 (giá EOD,
 tiền mặt, ngành, cổ tức) và mục 9 (hiển thị nguồn giá), trên nhánh riêng.
-Cả ba đã cài xong ở backend. Engine C CHƯA có UI — xem api-spec mục 7.11.
+Cả ba đã cài xong ở backend, engine C đã có UI đủ cả đọc và ghim lô bằng tay.
 Ràng buộc giữ nguyên: KHÔNG làm ĐỔI SỐ của fin/entries, fin/summary, và engine A/B.
 Bắt buộc: verify bằng dữ liệu thật đang có trong DB, in bảng đối chiếu
 "kỳ vọng vs thực tế". Không báo hoàn thành nếu còn dòng lệch.

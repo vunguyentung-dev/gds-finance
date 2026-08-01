@@ -1076,15 +1076,68 @@ dòng match của nó". Nhưng lô vừa được giải phóng có thể là l�
 bổ cũ đã sai. Bản cài gọi `rematch_symbol()` sau khi void — chỉ chạm dòng
 `is_manual = 0`, nên ghim tay của user vẫn nguyên.
 
-### 7.11 Chưa làm — UI
+### 7.11 UI — ĐÃ CÀI phần đọc
 
-Backend xong, **màn Giao dịch chưa có chỗ nào hiện engine C**. Khi làm UI, hai ràng
-buộc không được bỏ:
+Màn Giao dịch: mỗi lệnh **bán** ở bảng T+2 có nút `lô` mở panel
+`LotDetail.tsx`. Hai ràng buộc được cài thành **cấu trúc của panel**, không phải
+tuỳ chọn của người viết UI về sau:
 
-- `matched_pl` **không được** hiện mà thiếu `remaining` (7.6) — nếu không thì màn
-  hình sẽ báo lãi cao hơn thực chất, vì phần chênh đã bị đẩy sang phần còn nắm
-- mỗi số phải có **nhãn engine** (7.1) — ba engine ra ba con số khác nhau trên cùng
-  một lệnh bán, số không nhãn là số không đọc được
+- "Đã chốt" và "Còn nắm" là **hai cột cạnh nhau trong cùng một panel**, không tách
+  tab, không thu gọn. Không có đường nào trong code hiện `matched_pl` mà thiếu
+  `remaining` (7.6)
+- mỗi con số có **nhãn engine** (7.1). Panel còn có khối đối chiếu
+  **engine B vs engine C vs chênh lệch** cho cùng lệnh bán, kèm câu giải thích chênh
+  lệch nằm ở đâu
+
+Giá thị trường trong `remaining` hiện theo mục 9: `21.500` + dòng phụ
+`thủ công · 31/07`; chưa có giá thì `chưa có giá` và `— cần giá thị trường`.
+
+Panel tự nạp lại sau khi thêm/void lệnh, vì hai việc đó có thể làm engine C khớp
+lại lô (7.7) khiến số đang hiện thành số cũ.
+
+### 7.12 Ghim lô bằng tay — ĐÃ CÀI (verify 63 OK / 0 LỆCH)
+
+#### `GET fin/stock-txns/available-lots?sym=KDH&on=2026-08-01`
+
+```json
+{ "sym": "KDH", "on": "2026-08-01", "qty_left_total": "1500",
+  "lots": [ { "buy_txn_id": "118", "buy_date": "2026-07-01", "buy_price": "17000.0000",
+              "qty_total": "500", "qty_matched": "0", "qty_left": "500",
+              "unit_cost": "17025.5000", "settled": true, "settle_date": "2026-07-03" } ] }
+```
+
+`on` bỏ trống = hôm nay theo giờ VN. Lọc `buy_date <= on`.
+
+Endpoint này **phải** tồn tại vì `qty_left` là số client **không tự suy ra được**: nó
+phụ thuộc dòng khớp của *mọi* lệnh bán khác cùng mã, mà client chỉ thấy sổ lệnh.
+
+**Thứ tự trả về là HỢP ĐỒNG, không phải tiện lợi:** đúng thứ tự engine C sẽ tự khớp
+(giá vốn tăng dần), để UI hiện được "không ghim thì hệ thống chọn lô này". Test có
+dòng khẳng định lô endpoint xếp đầu đúng là lô hệ thống tự lấy, và khẳng định thứ tự
+này **khác** thứ tự ngày mua — nếu ai cài thành sắp theo ngày thì test đổ.
+
+Chỉ trả lô còn `qty_left > 0`; lô đã khớp hết không phải lựa chọn. Lô **chưa về
+(T+2) vẫn trả về và vẫn ghim được** — engine C không xét `settle` khi chọn lô (7.4),
+cờ `settled` chỉ để UI gắn badge.
+
+#### UI
+
+Form đặt lệnh BÁN có khối `LotPicker` với hai chế độ:
+
+- **Tự động** — bảng lô chỉ để xem, tô nhấn những lô hệ thống sẽ lấy và số lượng lấy
+  từ mỗi lô. Cảnh báo khi khối lượng bán vượt tổng còn chưa khớp.
+- **Ghim tay** — mỗi lô một ô nhập, kèm bộ đếm `Đã ghim x / y cp` và nút *Điền như
+  tự động* để chỉnh từ phân bổ mặc định thay vì gõ lại từ đầu.
+
+Chế độ Tự động **luôn hiện trước**, kể cả khi user định ghim tay: phải thấy "hệ thống
+sẽ chọn lô nào" mới biết mình đang ghim khác đi ở đâu, chứ không chọn trong bóng tối.
+
+Client kiểm `Σ ghim = qty` ngay tại form để user sửa được liền, nhưng đó là lớp
+**tiện dụng**, không phải lớp bảo đảm — backend vẫn kiểm lại và trả 400.
+
+Panel chi tiết lô ghi nhãn `ghim tay` khi lệnh có dòng `is_manual`, và **đổi cả câu
+mô tả**: nói "lô do bạn tự chọn" thay vì "lô rẻ nhất trước" — vì với lệnh ghim tay
+thì câu sau là **sai**, engine C có thể cho lãi *thấp* hơn engine B.
 
 ---
 

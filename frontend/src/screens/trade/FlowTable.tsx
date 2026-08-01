@@ -4,6 +4,9 @@ import { formatDateVN, signedDong, toDong, toQty } from '../../lib/format';
 interface Props {
   rows: FlowRow[];
   footer: SummaryFooter;
+  /** Lệnh bán đang mở panel chi tiết lô (engine C), null = chưa mở. */
+  openLotsId: string | null;
+  onToggleLots: (id: string) => void;
 }
 
 function t2Label(r: FlowRow): { text: string; color: string } {
@@ -17,7 +20,7 @@ function t2Label(r: FlowRow): { text: string; color: string } {
 }
 
 /** Bảng "Diễn tiến giao dịch theo T+2" — số liệu từ engine FIFO. */
-export function FlowTable({ rows, footer }: Props) {
+export function FlowTable({ rows, footer, openLotsId, onToggleLots }: Props) {
   const remain = Number(footer.flow_remain);
   const cumPl = Number(footer.cum_pl);
   const diff = Number(footer.engines_diff);
@@ -27,7 +30,8 @@ export function FlowTable({ rows, footer }: Props) {
       <div className="gf-trade-table-head">
         <div className="gf-trade-panel-title">Diễn tiến giao dịch theo T+2</div>
         <div className="gf-trade-table-sub">
-          Cổ phiếu chỉ bán được sau khi hàng về (T+2). Lãi/lỗ khớp theo FIFO, lũy kế đến khi bán sạch.
+          Cổ phiếu chỉ bán được sau khi hàng về (T+2). Lãi/lỗ khớp theo <b>FIFO</b> (engine B), lũy kế đến khi bán
+          sạch. Bấm <b>lô</b> ở cuối một lệnh bán để xem cách khớp của <b>engine C</b> — số sẽ khác, đó là thiết kế.
         </div>
       </div>
 
@@ -48,6 +52,7 @@ export function FlowTable({ rows, footer }: Props) {
                 <th>Lãi/lỗ dòng</th>
                 <th>Lũy kế</th>
                 <th>Còn nắm</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -82,6 +87,18 @@ export function FlowTable({ rows, footer }: Props) {
                       {signedDong(cum)}
                     </td>
                     <td className="muted">{toQty(Number(r.remain))} cp</td>
+                    <td className="gf-trade-lots-cell">
+                      {isBuy ? null : (
+                        <button
+                          type="button"
+                          className={`gf-trade-lots-btn${openLotsId === r.id ? ' on' : ''}`}
+                          onClick={() => onToggleLots(r.id)}
+                          title="Xem lệnh bán này ăn vào lô mua nào (engine C)"
+                        >
+                          lô{openLotsId === r.id ? ' ▾' : ' ▸'}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
