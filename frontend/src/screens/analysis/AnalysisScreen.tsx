@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '../../api/client';
-import { getQuotes, getSymbols, type Quote, type Symbol } from '../../api/market';
+import {
+  getQuoteHistory,
+  getQuotes,
+  getSymbols,
+  type HistoryResponse,
+  type Quote,
+  type Symbol,
+} from '../../api/market';
 import type { ThemeName } from '../../lib/theme';
 import { TradingViewWidget } from './TradingViewWidget';
 import { OwnPriceStrip } from './OwnPriceStrip';
+import { PriceChart } from './PriceChart';
+import { IndicatorPanel } from './IndicatorPanel';
 import { bareSymbol, INDEX_SHORTCUTS, isGatedExchange, resolveTvSymbol, tvChartUrl } from './tvSymbol';
 import '../../styles/analysis.css';
 
@@ -39,6 +48,12 @@ export function AnalysisScreen({ theme }: Props) {
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+
+  // Biểu đồ tự dựng từ fin_quote_history — nguồn CHÍNH của màn này.
+  const [hist, setHist] = useState<HistoryResponse | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histError, setHistError] = useState('');
+  const [showTv, setShowTv] = useState(false);
 
   const load = useCallback((ignore: { current: boolean }) => {
     getSymbols().then(
@@ -76,6 +91,20 @@ export function AnalysisScreen({ theme }: Props) {
   useEffect(() => {
     if (bare === null || !isTracked) return;
     const ignore = { current: false };
+    getQuoteHistory(bare).then(
+      (h) => {
+        if (ignore.current) return;
+        setHist(h);
+        setHistError('');
+        setHistLoading(false);
+      },
+      (err) => {
+        if (ignore.current) return;
+        setHist(null);
+        setHistError(errorMessageOf(err));
+        setHistLoading(false);
+      },
+    );
     getQuotes([bare]).then(
       (r) => {
         if (ignore.current) return;
@@ -100,6 +129,9 @@ export function AnalysisScreen({ theme }: Props) {
       setTvSymbol(resolved);
       setQuote(null);
       setQuoteLoading(true);
+      setHist(null);
+      setHistError('');
+      setHistLoading(true);
     }
   };
 
@@ -108,6 +140,9 @@ export function AnalysisScreen({ theme }: Props) {
     setTvSymbol(tv);
     setQuote(null);
     setQuoteLoading(false);
+    setHist(null);
+    setHistError('');
+    setHistLoading(false);
   };
 
   const chartConfig = useMemo(
@@ -260,21 +295,6 @@ export function AnalysisScreen({ theme }: Props) {
             </div>
           </div>
 
-          <div className="gf-an-pick-col">
-            <label className="gf-an-label">Khung thời gian</label>
-            <div className="gf-an-seg">
-              {INTERVALS.map((iv) => (
-                <button
-                  key={iv.id}
-                  type="button"
-                  className={`gf-an-seg-btn${interval === iv.id ? ' on' : ''}`}
-                  onClick={() => setInterval(iv.id)}
-                >
-                  {iv.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -293,93 +313,141 @@ export function AnalysisScreen({ theme }: Props) {
         </div>
       ) : (
         <>
+          {/* NGUỒN CHÍNH: biểu đồ dựng từ sổ của mình */}
           <div className="gf-an-row">
             <div className="gf-an-card chart">
               <div className="gf-an-card-head">
                 <div className="gf-an-card-title">
-                  {tvSymbol} · Phân tích kỹ thuật
-                  <span className="gf-an-badge">TradingView</span>
+                  {bare} · Giá đóng cửa
+                  <span className="gf-an-badge own">sổ của bạn</span>
                 </div>
-                <div className="gf-an-card-actions">
-                  <span className="gf-an-card-sub">Khung · {INTERVALS.find((i) => i.id === interval)?.label}</span>
-                  <a
-                    className="gf-an-ext"
-                    href={tvChartUrl(tvSymbol)}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    title="Mở biểu đồ trên tradingview.com — dữ liệu VN chỉ xem được ở đó"
-                  >
-                    Mở trên TradingView ↗
-                  </a>
+                <div className="gf-an-card-sub">
+                  Dựng từ fin_quote_history · không nội suy phiên trống, không vẽ nến (sổ chỉ có giá đóng cửa)
                 </div>
               </div>
 
-              {isGatedExchange(tvSymbol) && (
-                <div className="gf-an-gated">
-                  Mã sàn Việt Nam: khối dưới đây rất có thể chỉ hiện “Mã giao dịch này chỉ có trên TradingView”. Đó là
-                  giới hạn bản quyền của họ, không phải lỗi của ứng dụng.
+              {!isTracked ? (
+                <div className="gf-ch-empty">
+                  <b>{isIndex ? `${tvSymbol} là chỉ số` : `${bare} chưa có trong danh sách theo dõi`}.</b>
+                  <div>
+                    {isIndex
+                      ? 'Ứng dụng không lưu giá cho chỉ số, nên không dựng được biểu đồ từ sổ.'
+                      : 'Thêm mã ở màn Bảng giá rồi nhập giá đóng cửa để dựng biểu đồ.'}
+                  </div>
                 </div>
-              )}
-              {/* key: đổi mã / khung / theme thì remount để widget dựng lại sạch */}
-              <TradingViewWidget
-                key={`chart-${tvSymbol}-${interval}-${theme}`}
-                widget="advanced-chart"
-                config={chartConfig}
-                height={420}
-                label="biểu đồ"
-              />
+              ) : histLoading ? (
+                <div className="gf-ch-empty">Đang đọc chuỗi giá…</div>
+              ) : histError !== '' ? (
+                <div className="gf-ch-empty">
+                  <b>Không đọc được chuỗi giá.</b>
+                  <div>{histError}</div>
+                </div>
+              ) : hist !== null ? (
+                <PriceChart points={hist.points} ma20={hist.indicators.ma20} ma50={hist.indicators.ma50} />
+              ) : null}
             </div>
 
-            <div className="gf-an-card">
-              <div className="gf-an-card-head">
-                <div className="gf-an-card-title">
-                  Chỉ báo
-                  <span className="gf-an-badge">TradingView</span>
+            {isTracked && hist !== null && !histLoading && histError === '' ? (
+              <IndicatorPanel data={hist} />
+            ) : (
+              <div className="gf-an-card">
+                <div className="gf-an-card-head">
+                  <div className="gf-an-card-title">
+                    Chỉ báo
+                    <span className="gf-an-badge own">sổ của bạn</span>
+                  </div>
                 </div>
-                <div className="gf-an-card-sub">Tín hiệu tổng hợp từ nhóm chỉ báo dao động và trung bình động</div>
+                <div className="gf-ind-why na">
+                  Chỉ báo tính từ chuỗi giá đóng cửa trong sổ. Chưa có chuỗi thì chưa có chỉ báo.
+                </div>
               </div>
-              <TradingViewWidget
-                key={`ta-${tvSymbol}-${interval}-${theme}`}
-                widget="technical-analysis"
-                config={taConfig}
-                height={420}
-                label="bảng chỉ báo"
-              />
-            </div>
+            )}
           </div>
 
           {isTracked ? (
             <OwnPriceStrip sym={bare ?? ''} quote={quote} loading={quoteLoading} />
-          ) : (
-            <div className="gf-an-own">
-              <div className="gf-an-own-head">
-                <div className="gf-an-own-title">Giá trong sổ của bạn</div>
+          ) : null}
+
+          {/* NGUỒN PHỤ: TradingView, mặc định ĐÓNG vì mã VN bị chặn dữ liệu */}
+          <div className="gf-an-card">
+            <div className="gf-an-card-head">
+              <div className="gf-an-card-title">
+                {tvSymbol} · Biểu đồ TradingView
+                <span className="gf-an-badge">nguồn ngoài</span>
               </div>
-              <div className="gf-an-own-msg">
-                {isIndex ? (
-                  <>
-                    <b>{tvSymbol}</b> là chỉ số, không phải mã cổ phiếu — ứng dụng không lưu giá cho nó, nên không có
-                    gì để đối chiếu.
-                  </>
-                ) : (
-                  <>
-                    <b>{bare}</b> chưa có trong danh sách theo dõi, nên ứng dụng không lưu giá cho nó. Thêm mã ở màn{' '}
-                    <b>Bảng giá</b> để đối chiếu được giá trong sổ với biểu đồ.
-                  </>
-                )}
+              <div className="gf-an-card-actions">
+                <button type="button" className="gf-an-toggle" onClick={() => setShowTv((v) => !v)}>
+                  {showTv ? 'Ẩn' : 'Hiện'}
+                </button>
+                <a
+                  className="gf-an-ext"
+                  href={tvChartUrl(tvSymbol)}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title="Mở biểu đồ trên tradingview.com — dữ liệu VN chỉ xem được ở đó"
+                >
+                  Mở trên TradingView ↗
+                </a>
               </div>
             </div>
-          )}
+
+            {isGatedExchange(tvSymbol) && (
+              <div className="gf-an-gated">
+                Mã sàn Việt Nam: TradingView chặn dữ liệu trong widget nhúng, nên khối này chỉ hiện “Mã giao dịch này
+                chỉ có trên TradingView”. Dùng nút <b>Mở trên TradingView</b> ở trên. Vì vậy khối mặc định để đóng.
+              </div>
+            )}
+
+            {showTv && (
+              <>
+                <div className="gf-an-tvbar">
+                  <span className="gf-an-card-sub">Khung · {INTERVALS.find((i) => i.id === interval)?.label}</span>
+                  <div className="gf-an-seg sm">
+                    {INTERVALS.map((iv) => (
+                      <button
+                        key={iv.id}
+                        type="button"
+                        className={`gf-an-seg-btn${interval === iv.id ? ' on' : ''}`}
+                        onClick={() => setInterval(iv.id)}
+                      >
+                        {iv.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="gf-an-row">
+                  <TradingViewWidget
+                    key={`chart-${tvSymbol}-${interval}-${theme}`}
+                    widget="advanced-chart"
+                    config={chartConfig}
+                    height={420}
+                    label="biểu đồ"
+                  />
+                  <TradingViewWidget
+                    key={`ta-${tvSymbol}-${interval}-${theme}`}
+                    widget="technical-analysis"
+                    config={taConfig}
+                    height={420}
+                    label="bảng chỉ báo"
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </>
       )}
 
       <div className="gf-an-note">
-        <b>Không có chỉ báo nào do ứng dụng tự tính.</b> Ứng dụng chỉ lưu <b>giá đóng cửa</b> theo phiên, không có khối
-        lượng và không có dữ liệu trong phiên, nên không đủ để tính RSI, MACD hay MA cho ra số đáng tin. Thay vì hiện
-        số tự tính từ dữ liệu thiếu, màn này dùng nguồn có đủ dữ liệu và ghi rõ đó là nguồn nào.
+        <b>Chỉ báo tính từ giá đóng cửa trong sổ, ở backend.</b> RSI, MACD và MA chỉ cần chuỗi giá đóng cửa — không cần
+        khối lượng, không cần dữ liệu trong phiên. Cái quyết định là <b>số phiên</b>: RSI(14) cần 15 phiên, MA20 cần 20,
+        MACD cần 26 và đường tín hiệu cần 34. Thiếu phiên thì ô đó hiện đúng câu “cần N phiên, đang có M” chứ không hiện
+        số tính từ dữ liệu thiếu.
+        <br />
+        <b>Không vẽ nến và không nội suy phiên trống.</b> Sổ chỉ lưu giá đóng cửa, không có mở/cao/thấp — vẽ nến thì
+        phải bịa ba trong bốn giá trị. Chỗ thiếu dữ liệu để trống, không nối thẳng qua.
         <br />
         <b>Số RSI 61,2 và MACD +1,24 trong ảnh thiết kế là chuỗi cố định</b> viết thẳng trong HTML của prototype, không
-        phải kết quả tính. Không có công thức nào để port sang.
+        phải kết quả tính — giống ca Trần/Sàn ở màn Bảng giá.
       </div>
     </div>
   );

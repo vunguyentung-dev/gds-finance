@@ -411,6 +411,141 @@ class GDSFIN_Market {
         ]);
     }
 
+    /* ===================== CHỈ BÁO KỸ THUẬT ===================== */
+
+    /**
+     * Chỉ báo tính từ CHUỖI GIÁ ĐÓNG CỬA trong fin_quote_history.
+     *
+     * Đính chính một nhận định sai đã ghi ở mục 11.3 lần đầu: RSI, MACD và MA đều chỉ
+     * cần giá đóng cửa, KHÔNG cần khối lượng hay dữ liệu trong phiên. Chúng tính được.
+     * Cái thiếu là SỐ LƯỢNG PHIÊN, không phải loại dữ liệu — nên mỗi chỉ báo trả kèm
+     * available + reason nêu rõ cần bao nhiêu phiên và đang có bao nhiêu.
+     *
+     * Dùng bcmath scale 10 như mọi phép tính khác của dự án: MA và MACD mang đơn vị
+     * đồng/cp nên không được cộng dồn bằng float.
+     */
+    private static function sma(array $c, int $n, int $end): ?string {
+        if ($end + 1 < $n) return null;
+        $s = '0';
+        for ($i = $end - $n + 1; $i <= $end; $i++) $s = bcadd($s, $c[$i], self::S);
+        return bcdiv($s, (string) $n, self::S);
+    }
+
+    /** EMA cả chuỗi, mồi bằng SMA tại điểm thứ n-1. Trước đó là null. */
+    private static function ema_series(array $c, int $n): array {
+        $out = array_fill(0, count($c), null);
+        if (count($c) < $n) return $out;
+        $k = bcdiv('2', (string) ($n + 1), self::S);
+        $out[$n - 1] = self::sma($c, $n, $n - 1);
+        for ($i = $n; $i < count($c); $i++) {
+            // ema = prev + k × (giá − prev)
+            $out[$i] = bcadd($out[$i - 1], bcmul($k, bcsub($c[$i], $out[$i - 1], self::S), self::S), self::S);
+        }
+        return $out;
+    }
+
+    private static function sma_series(array $c, int $n): array {
+        $out = array_fill(0, count($c), null);
+        for ($i = $n - 1; $i < count($c); $i++) $out[$i] = self::sma($c, $n, $i);
+        return $out;
+    }
+
+    /** RSI Wilder: mồi bằng trung bình 14 biến động đầu, sau đó làm trơn dần. */
+    private static function rsi_series(array $c, int $n = 14): array {
+        $len = count($c);
+        $out = array_fill(0, $len, null);
+        if ($len < $n + 1) return $out;
+
+        $g = '0'; $l = '0';
+        for ($i = 1; $i <= $n; $i++) {
+            $d = bcsub($c[$i], $c[$i - 1], self::S);
+            if (bccomp($d, '0', self::S) >= 0) $g = bcadd($g, $d, self::S);
+            else                               $l = bcadd($l, bcsub('0', $d, self::S), self::S);
+        }
+        $ag = bcdiv($g, (string) $n, self::S);
+        $al = bcdiv($l, (string) $n, self::S);
+        $out[$n] = self::rsi_of($ag, $al);
+
+        for ($i = $n + 1; $i < $len; $i++) {
+            $d  = bcsub($c[$i], $c[$i - 1], self::S);
+            $up = bccomp($d, '0', self::S) >= 0 ? $d : '0';
+            $dn = bccomp($d, '0', self::S) < 0 ? bcsub('0', $d, self::S) : '0';
+            $ag = bcdiv(bcadd(bcmul($ag, (string) ($n - 1), self::S), $up, self::S), (string) $n, self::S);
+            $al = bcdiv(bcadd(bcmul($al, (string) ($n - 1), self::S), $dn, self::S), (string) $n, self::S);
+            $out[$i] = self::rsi_of($ag, $al);
+        }
+        return $out;
+    }
+
+    private static function rsi_of(string $ag, string $al): string {
+        // Không có phiên giảm nào => RSI = 100. Chia cho 0 là ca thật, không phải lỗi.
+        if (bccomp($al, '0', self::S) === 0) return bccomp($ag, '0', self::S) === 0 ? '50' : '100';
+        $rs = bcdiv($ag, $al, self::S);
+        return bcsub('100', bcdiv('100', bcadd('1', $rs, self::S), self::S), self::S);
+    }
+
+    /** Bọc một chỉ báo thành {series, latest, available, reason} — mẫu của mục 8.8. */
+    private static function ind_out(array $series, int $need, int $have, string $what, int $scale = 4): array {
+        $last = null;
+        for ($i = count($series) - 1; $i >= 0; $i--) {
+            if ($series[$i] !== null) { $last = $series[$i]; break; }
+        }
+        return [
+            'series'    => array_map(
+                fn($v) => $v === null ? null : ($scale === 2 ? GDSFIN_Util::pct_out($v) : GDSFIN_Util::money_out($v)),
+                $series
+            ),
+            'latest'    => $last === null ? null
+                : ($scale === 2 ? GDSFIN_Util::pct_out($last) : GDSFIN_Util::money_out($last)),
+            'available' => $last !== null,
+            'reason'    => $last !== null ? null
+                : "$what cần $need phiên, đang có $have — nhập thêm giá để tính được",
+        ];
+    }
+
+    /**
+     * Toàn bộ chỉ báo cho một chuỗi đóng cửa.
+     * $closes đã sắp theo trade_date tăng dần.
+     */
+    public static function indicators(array $closes): array {
+        $have = count($closes);
+
+        $ma20 = self::sma_series($closes, 20);
+        $ma50 = self::sma_series($closes, 50);
+        $rsi  = self::rsi_series($closes, 14);
+
+        // MACD = EMA12 − EMA26; tín hiệu = EMA9 của MACD
+        $e12 = self::ema_series($closes, 12);
+        $e26 = self::ema_series($closes, 26);
+        $line = array_fill(0, $have, null);
+        for ($i = 0; $i < $have; $i++) {
+            if ($e12[$i] !== null && $e26[$i] !== null) $line[$i] = bcsub($e12[$i], $e26[$i], self::S);
+        }
+        // EMA của MACD chỉ chạy trên phần đã có số, rồi ghép lại đúng chỉ số gốc.
+        $compact = array_values(array_filter($line, fn($v) => $v !== null));
+        $sig_c   = self::ema_series($compact, 9);
+        $signal  = array_fill(0, $have, null);
+        $offset  = $have - count($compact);
+        foreach ($sig_c as $j => $v) if ($v !== null) $signal[$offset + $j] = $v;
+
+        $hist = array_fill(0, $have, null);
+        for ($i = 0; $i < $have; $i++) {
+            if ($line[$i] !== null && $signal[$i] !== null) $hist[$i] = bcsub($line[$i], $signal[$i], self::S);
+        }
+
+        return [
+            'sessions' => $have,
+            'ma20'     => self::ind_out($ma20, 20, $have, 'MA20'),
+            'ma50'     => self::ind_out($ma50, 50, $have, 'MA50'),
+            'rsi14'    => self::ind_out($rsi, 15, $have, 'RSI(14)', 2),
+            'macd'     => [
+                'line'   => self::ind_out($line, 26, $have, 'MACD'),
+                'signal' => self::ind_out($signal, 34, $have, 'Đường tín hiệu MACD'),
+                'hist'   => self::ind_out($hist, 34, $have, 'Histogram MACD'),
+            ],
+        ];
+    }
+
     public static function get_history(WP_REST_Request $req) {
         global $wpdb;
         $sym = strtoupper(sanitize_text_field((string) $req->get_param('sym')));
@@ -424,13 +559,29 @@ class GDSFIN_Market {
               ORDER BY trade_date ASC LIMIT 3000", $sym, $from, $to
         ), ARRAY_A) ?: [];
 
-        return rest_ensure_response(['sym' => $sym, 'points' => array_map(fn($r) => [
-            'trade_date'  => $r['trade_date'],
-            'close_price' => GDSFIN_Util::money_out($r['close']),
-            'source'      => $r['source'],
-            'is_manual'   => $r['source'] === 'manual',
-            'fetched_at'  => $r['updated_at'],
-        ], $rows)]);
+        $closes = array_map(fn($r) => (string) $r['close'], $rows);
+        $manual = 0;
+        foreach ($rows as $r) if ($r['source'] === 'manual') $manual++;
+
+        return rest_ensure_response([
+            'sym'    => $sym,
+            'points' => array_map(fn($r) => [
+                'trade_date'  => $r['trade_date'],
+                'close_price' => GDSFIN_Util::money_out($r['close']),
+                'source'      => $r['source'],
+                'is_manual'   => $r['source'] === 'manual',
+                'fetched_at'  => $r['updated_at'],
+            ], $rows),
+            // Nguồn gốc của cả chuỗi — mục 9.1 áp cho biểu đồ, không chỉ cho một giá.
+            'coverage' => [
+                'sessions'    => count($rows),
+                'from'        => $rows ? $rows[0]['trade_date'] : null,
+                'to'          => $rows ? end($rows)['trade_date'] : null,
+                'manual'      => $manual,
+                'auto'        => count($rows) - $manual,
+            ],
+            'indicators' => self::indicators($closes),
+        ]);
     }
 
     /** Mã đang nắm mà THIẾU giá của phiên gần nhất — điều khiển UI nhập tay bù. */

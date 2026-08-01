@@ -1935,10 +1935,13 @@ cách nói thẳng:
 `fin_quote_history`. Tự dựng thì hiện chỉ có **giá đóng cửa** nhập tay, không có khối
 lượng và không có dữ liệu trong phiên.
 
-### 11.3 Không tự tính chỉ báo
+### 11.3 Chỉ báo tự tính — ĐÍNH CHÍNH
 
-Ứng dụng chỉ lưu giá đóng cửa theo phiên → **không đủ** để tính RSI, MACD, MA ra số
-đáng tin. Màn **không** hiện chỉ báo nào do mình tính.
+Bản đầu của mục này viết: *"chỉ lưu giá đóng cửa → không đủ để tính RSI, MACD, MA"*.
+**Câu đó sai.** RSI, MACD và MA đều chỉ cần **chuỗi giá đóng cửa** — không cần khối
+lượng, không cần dữ liệu trong phiên. Chúng tính được.
+
+Cái thật sự thiếu là **số phiên**, không phải loại dữ liệu. Xem mục 12.
 
 `RSI 61,2` và `MACD +1,24` trong ảnh thiết kế là **chuỗi cố định viết thẳng trong
 HTML** của prototype (dòng 505-506), không phải kết quả tính — không có công thức để
@@ -1972,3 +1975,84 @@ sau 8 giây) và báo, thay vì để một ô trống không giải thích.
 **Giới hạn của phép phát hiện này:** `iframe` khác origin nên không đọc được nội dung.
 Widget bị **chặn dữ liệu** vẫn tạo `iframe`, nên vẫn bị tính là “tải được”. Đó là lý
 do 11.1 phải nói bằng băng thông báo tĩnh chứ không dò tự động được.
+
+---
+
+## 12. Chỉ báo tính từ fin_quote_history
+
+Trạng thái: **ĐÃ CÀI** — verify 52 OK / 0 LỆCH.
+
+### 12.1 Tính ở backend, không ở client
+
+`GET fin/quotes/history` trả thêm `coverage` và `indicators`. Không thêm endpoint mới.
+
+Đặt ở backend vì hai lý do, không phải vì tiện: (1) giữ đúng luật "client KHÔNG tự
+tính", (2) bộ verify của dự án chạy bằng `wp eval-file` nên số nào ở backend thì đối
+chiếu được bằng bảng kỳ vọng-vs-thực-tế.
+
+Dùng **bcmath scale 10** như mọi phép tính khác: MA và MACD mang đơn vị đồng/cp nên
+không cộng dồn bằng float.
+
+### 12.2 Số phiên tối thiểu — và không bịa số khi thiếu
+
+| Chỉ báo | Cần | Vì sao |
+|---|---|---|
+| MA20 | 20 phiên | trung bình 20 điểm |
+| MA50 | 50 phiên | trung bình 50 điểm |
+| RSI(14) | 15 phiên | 14 biến động cần 15 giá |
+| MACD | 26 phiên | EMA26 mồi bằng SMA 26 điểm |
+| Đường tín hiệu MACD | 34 phiên | EMA9 của MACD, mà MACD bắt đầu ở phiên 26 |
+
+Mỗi chỉ báo trả `{series, latest, available, reason}` — mẫu của mục 8.8. Thiếu phiên
+thì `latest = null` và `reason` ghi đúng **"cần N phiên, đang có M"**. UI hiện nguyên
+câu đó, **không** hiện số tính từ dữ liệu thiếu.
+
+`series` thẳng hàng với `points`, `null` ở đầu chuỗi nơi chưa đủ phiên — để UI vẽ MA
+đúng đoạn có dữ liệu chứ không kéo ngang cho liền mắt.
+
+### 12.3 Công thức
+
+- **SMA(n)** tại i = trung bình n giá đóng cửa tính đến i
+- **EMA(n)**: mồi bằng SMA n điểm đầu, sau đó `ema_i = ema_{i-1} + k × (giá_i − ema_{i-1})`, `k = 2/(n+1)`
+- **RSI(14)** Wilder: mồi bằng trung bình 14 biến động đầu, sau đó làm trơn
+  `avg = (avg × 13 + biến động) / 14`; `RSI = 100 − 100/(1 + avgGain/avgLoss)`
+- **MACD** = EMA12 − EMA26 · **tín hiệu** = EMA9 của MACD · **histogram** = MACD − tín hiệu
+
+Ba ca biên của RSI đã cài rõ, đều có test: không phiên giảm → **100**; không phiên
+tăng → **0**; đi ngang tuyệt đối (`avgGain = avgLoss = 0`) → **50**, không chia cho 0.
+
+### 12.4 Cách verify
+
+Ngoài các ca tính tay, có hai chốt kiểm mạnh hơn số cố định:
+
+1. **Dựng lại EMA độc lập** trong chính bộ test bằng công thức đệ quy, so với MACD mà
+   backend trả — khớp `700.0000`.
+2. **Bất biến qua phép dịch**: RSI và MACD không đổi khi dịch cả chuỗi giá thêm một
+   hằng số, còn MA thì đổi. Chính bất biến này đã chỉ ra lần chạy đầu lệch **MA20 100 đ**
+   là **lỗi bộ test** (một chuỗi đánh chỉ số từ 1, chuỗi kia từ 0) chứ không phải lỗi
+   code — RSI và MACD vẫn khớp đúng.
+
+### 12.5 Biểu đồ — hai điều KHÔNG làm
+
+- **Không vẽ nến.** Sổ chỉ có giá đóng cửa; vẽ nến phải bịa ba trong bốn giá trị.
+- **Không nội suy phiên trống.** Mỗi đoạn liên tục là một lệnh `M…L` riêng, nên chỗ
+  thiếu dữ liệu là khoảng trống thật, không phải đường thẳng nối qua.
+
+Biểu đồ hiện `coverage`: số phiên, khoảng ngày, và **bao nhiêu điểm nhập tay / tự
+động** — mục 9.1 áp cho cả chuỗi, không riêng một giá.
+
+### 12.6 Khối "Tổng hợp máy móc"
+
+Thiết kế gốc có thẻ *"MUA — Tích cực"*. Bản cài giữ cấu trúc nhưng:
+
+- Là phép **đếm** trên các chỉ báo **đã đủ phiên**; chỉ báo chưa đủ **không** được tính vào
+- **Luôn phơi cách đếm**: liệt kê từng phiếu kèm số cụ thể đã so với ngưỡng nào
+- Dùng chữ mô tả trạng thái (`nghiêng tăng` / `trung tính` / `nghiêng giảm`) thay vì
+  chữ ra lệnh, và ghi thẳng "không phải khuyến nghị" — vì đây là tổng hợp cơ học từ
+  vài chỉ báo trên giá đóng cửa
+
+### 12.7 TradingView thành nguồn PHỤ
+
+Sau khi có biểu đồ của mình, khối TradingView chuyển xuống dưới và **mặc định đóng**:
+với mã VN nó chỉ hiện câu chặn (mục 11.1), nên mở sẵn là chiếm chỗ vô ích. Nút
+**Mở trên TradingView ↗** vẫn giữ vì đó là đường dùng được thật.
