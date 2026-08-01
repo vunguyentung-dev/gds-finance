@@ -27,16 +27,31 @@ function plColor(v: number): string {
  *     số không nhãn là số không đọc được.
  */
 export function LotDetail({ detail, loading, error, engineBPl, onClose, onRetry }: Props) {
+  // Lệnh do user ghim tay thì thứ tự KHÔNG phải "rẻ nhất trước" — nói vậy là ghi
+  // nhãn sai. Nhãn phải nói đúng cách phân bổ đã dùng cho chính lệnh này.
+  const pinned = detail !== null && detail.matches.some((m) => m.is_manual);
+
   return (
     <div className="gf-trade-table-wrap gf-lot">
       <div className="gf-trade-table-head gf-lot-head">
         <div>
           <div className="gf-trade-panel-title">
             Chi tiết khớp lô <span className="gf-lot-engine">engine C</span>
+            {pinned && <span className="gf-lot-engine pin">ghim tay</span>}
           </div>
           <div className="gf-trade-table-sub">
-            Khớp lô có <b>giá vốn thấp nhất trước</b> — tức lãi cao nhất trước. Cách này khác cả engine A (bình quân
-            gia quyền) và engine B (FIFO), nên ba số lãi/lỗ khác nhau trên cùng một lệnh bán là đúng thiết kế.
+            {pinned ? (
+              <>
+                Lô của lệnh này do <b>bạn tự chọn</b>, không theo thứ tự tự động. Các lần khớp lại về sau sẽ không ghi
+                đè lựa chọn này.
+              </>
+            ) : (
+              <>
+                Khớp lô có <b>giá vốn thấp nhất trước</b> — tức lãi cao nhất trước.
+              </>
+            )}{' '}
+            Cách này khác cả engine A (bình quân gia quyền) và engine B (FIFO), nên ba số lãi/lỗ khác nhau trên cùng
+            một lệnh bán là đúng thiết kế.
           </div>
         </div>
         <button type="button" className="gf-lot-close" onClick={onClose} title="Đóng">
@@ -55,12 +70,20 @@ export function LotDetail({ detail, loading, error, engineBPl, onClose, onRetry 
         </div>
       )}
 
-      {!loading && error === '' && detail && <Body detail={detail} engineBPl={engineBPl} />}
+      {!loading && error === '' && detail && <Body detail={detail} engineBPl={engineBPl} pinned={pinned} />}
     </div>
   );
 }
 
-function Body({ detail, engineBPl }: { detail: LotDetailData; engineBPl: string | null }) {
+function Body({
+  detail,
+  engineBPl,
+  pinned,
+}: {
+  detail: LotDetailData;
+  engineBPl: string | null;
+  pinned: boolean;
+}) {
   const matchedPl = Number(detail.matched_pl);
   const unmatched = Number(detail.unmatched_qty);
   const remaining = detail.remaining;
@@ -236,7 +259,8 @@ function Body({ detail, engineBPl }: { detail: LotDetailData; engineBPl: string 
             </div>
             <div>
               <div className="gf-lot-cmp-label">
-                Engine C — lô rẻ nhất trước <span className="gf-lot-cmp-hint">chỉ là thông tin của lệnh này</span>
+                Engine C — {pinned ? 'lô ghim tay' : 'lô rẻ nhất trước'}{' '}
+                <span className="gf-lot-cmp-hint">chỉ là thông tin của lệnh này</span>
               </div>
               <div className="gf-lot-cmp-num" style={{ color: plColor(matchedPl) }}>
                 {signedDong(matchedPl)}
@@ -257,9 +281,16 @@ function Body({ detail, engineBPl }: { detail: LotDetailData; engineBPl: string 
             ) : (
               <>
                 Engine C <b>không tạo thêm đồng lãi nào</b>, nó chỉ dịch {toDong(Math.abs(diff))} giữa phần đã chốt và
-                phần còn nắm: giá vốn phần còn nắm ở trên cũng cao hơn engine B đúng chừng đó. Vì vậy cột “Lũy kế” và
-                thẻ “Tổng lãi/lỗ đã thực hiện” <b>vẫn giữ số của engine A/B</b> — engine C là lớp thông tin, không
-                thay số tổng.
+                phần còn nắm: giá vốn phần còn nắm ở trên lệch khỏi engine B đúng chừng đó, ngược dấu. Vì vậy cột
+                “Lũy kế” và thẻ “Tổng lãi/lỗ đã thực hiện” <b>vẫn giữ số của engine A/B</b> — engine C là lớp thông
+                tin, không thay số tổng.
+                {diff < 0 && (
+                  <>
+                    {' '}
+                    Ở lệnh này engine C cho lãi <b>thấp hơn</b> engine B, vì lô đã chọn đắt hơn lô mà FIFO lấy — phần
+                    chênh nằm lại ở giá vốn phần còn nắm, thấp đi đúng {toDong(Math.abs(diff))}.
+                  </>
+                )}
               </>
             )}
           </div>

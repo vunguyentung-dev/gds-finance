@@ -127,12 +127,43 @@ export function getLotDetail(sellTxnId: string) {
   return apiClient.get<LotDetail>(`fin/stock-txns/${sellTxnId}/lots`);
 }
 
+/** Một lô mua còn hàng chưa khớp, để user ghim tay. docs/api-spec.md mục 7.11. */
+export interface AvailableLot {
+  buy_txn_id: string;
+  buy_date: string;
+  buy_price: string;
+  qty_total: string;
+  qty_matched: string;
+  qty_left: string;
+  unit_cost: string;
+  settled: boolean;
+  settle_date: string;
+}
+
+export interface AvailableLots {
+  sym: string;
+  on: string;
+  qty_left_total: string;
+  /** Đã sắp theo đúng thứ tự engine C sẽ tự khớp: giá vốn tăng dần. */
+  lots: AvailableLot[];
+}
+
+export function getAvailableLots(sym: string, on: string) {
+  const q = new URLSearchParams({ sym, on }).toString();
+  return apiClient.get<AvailableLots>(`fin/stock-txns/available-lots?${q}`);
+}
+
 export interface RateTier {
   id: string | null;
   eff_date: string;
   buy_fee: string;
   sell_fee: string;
   tax: string;
+}
+
+export interface LotMatchInput {
+  buy_txn_id: string;
+  qty: string;
 }
 
 export interface CreateTxnPayload {
@@ -143,6 +174,11 @@ export interface CreateTxnPayload {
   qty: string;
   /** ĐỒNG / cổ phiếu, chuỗi. */
   price: string;
+  /**
+   * Chỉ cho lệnh BÁN. Bỏ trống = hệ thống tự khớp lô rẻ nhất trước.
+   * Σ qty phải ĐÚNG BẰNG qty lệnh bán, thiếu hay thừa đều bị backend trả 400.
+   */
+  lot_matches?: LotMatchInput[];
 }
 
 export function getStockTxns() {
@@ -170,7 +206,7 @@ export function upsertRate(payload: UpsertRatePayload) {
 }
 
 export function createStockTxn(payload: CreateTxnPayload) {
-  return apiClient.post<{ id: string }>('fin/stock-txns', payload);
+  return apiClient.post<{ id: string; lot_matches_mode?: 'auto' | 'manual' }>('fin/stock-txns', payload);
 }
 
 export function voidStockTxn(id: string) {

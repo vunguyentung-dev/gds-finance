@@ -50,10 +50,20 @@ class GDSFIN_Lots {
     /* ===================== ROUTES ===================== */
 
     public static function register_routes() {
+        $view = fn() => current_user_can('fin_view');
+
+        // Đặt TRƯỚC route có (?P<id>\d+) không bắt buộc về thứ tự, nhưng để cạnh nhau
+        // cho thấy 'available-lots' là một path CỐ ĐỊNH, không phải một id.
+        register_rest_route('fin/v1', '/fin/stock-txns/available-lots', [
+            'methods'             => 'GET',
+            'callback'            => [self::class, 'available_lots'],
+            'permission_callback' => $view,
+        ]);
+
         register_rest_route('fin/v1', '/fin/stock-txns/(?P<id>\d+)/lots', [
             'methods'             => 'GET',
             'callback'            => [self::class, 'detail'],
-            'permission_callback' => fn() => current_user_can('fin_view'),
+            'permission_callback' => $view,
         ]);
     }
 
@@ -123,6 +133,8 @@ class GDSFIN_Lots {
                 'id'        => (int) $r['id'],
                 'txn_date'  => $r['txn_date'],
                 'price'     => (string) $r['price'],
+                'total'     => (string) $r['qty'],
+                'used'      => (string) $r['used'],
                 'left'      => $left,
                 'unit_cost' => self::unit_cost($uid, $r),
             ];
@@ -359,6 +371,59 @@ class GDSFIN_Lots {
     }
 
     /* ===================== ENDPOINT ===================== */
+
+    /**
+     * Các lô MUA còn hàng chưa khớp, để UI cho user ghim lô bằng tay (mục 7.11).
+     *
+     * Endpoint này tồn tại vì client KHÔNG tự suy ra được `qty_left`: nó phụ thuộc
+     * dòng khớp của MỌI lệnh bán khác cùng mã, mà client chỉ thấy sổ lệnh.
+     *
+     * Trả theo đúng thứ tự engine C sẽ tự khớp (giá vốn tăng dần), để UI hiện được
+     * "không ghim thì hệ thống chọn lô này" trước khi user quyết định chọn khác.
+     * Chỉ trả lô còn `qty_left > 0` — lô đã khớp hết không phải lựa chọn.
+     */
+    public static function available_lots(WP_REST_Request $req) {
+        $uid = get_current_user_id();
+
+        self::ensure_backfilled($uid);
+
+        $sym = strtoupper(sanitize_text_field((string) $req->get_param('sym')));
+        if (!preg_match('/^[A-Z0-9]{3,12}$/', $sym)) {
+            return new WP_Error('bad_sym', 'Thiếu hoặc sai tham số sym', ['status' => 400]);
+        }
+        $on = sanitize_text_field((string) $req->get_param('on'));
+        if ($on === '') $on = GDSFIN_Util::today();
+        if (!GDSFIN_Util::is_date($on)) {
+            return new WP_Error('bad_date', 'on phải dạng Y-m-d', ['status' => 400]);
+        }
+
+        $left_total = '0';
+        $out = [];
+        foreach (self::buy_lots($uid, $sym, $on) as $l) {
+            $settle     = GDSFIN_Util::add_trading_days($l['txn_date'], 2);
+            $left_total = bcadd($left_total, $l['left'], 0);
+            $out[] = [
+                'buy_txn_id'  => (string) $l['id'],
+                'buy_date'    => $l['txn_date'],
+                'buy_price'   => GDSFIN_Util::money_out($l['price']),
+                'qty_total'   => GDSFIN_Util::qty_out($l['total']),
+                'qty_matched' => GDSFIN_Util::qty_out($l['used']),
+                'qty_left'    => GDSFIN_Util::qty_out($l['left']),
+                'unit_cost'   => GDSFIN_Util::money_out($l['unit_cost']),
+                // Lô chưa về vẫn ghim được — engine C không xét settle khi chọn lô
+                // (mục 7.4), cờ này chỉ để UI hiện badge.
+                'settled'     => $settle <= $on,
+                'settle_date' => $settle,
+            ];
+        }
+
+        return rest_ensure_response([
+            'sym'            => $sym,
+            'on'             => $on,
+            'qty_left_total' => GDSFIN_Util::qty_out($left_total),
+            'lots'           => $out,
+        ]);
+    }
 
     public static function detail(WP_REST_Request $req) {
         global $wpdb;

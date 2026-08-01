@@ -1095,20 +1095,49 @@ Giá thị trường trong `remaining` hiện theo mục 9: `21.500` + dòng ph�
 Panel tự nạp lại sau khi thêm/void lệnh, vì hai việc đó có thể làm engine C khớp
 lại lô (7.7) khiến số đang hiện thành số cũ.
 
-**CHƯA làm — ghim lô bằng tay trên UI.** `POST fin/stock-txns` đã nhận
-`lot_matches` và backend đã verify đủ, nhưng form đặt lệnh chưa có chỗ chọn lô. Thiếu
-một endpoint: để user chọn được thì UI phải biết **lô nào còn bao nhiêu cp chưa
-khớp** tại một (mã, ngày) — số này client **không tự suy ra được**, vì nó phụ thuộc
-dòng khớp của *mọi* lệnh bán khác. Cần thêm:
+### 7.12 Ghim lô bằng tay — ĐÃ CÀI (verify 63 OK / 0 LỆCH)
 
-```
-GET fin/stock-txns/available-lots?sym=KDH&on=2026-08-01
--> { sym, on, lots: [{ buy_txn_id, buy_date, qty_total, qty_matched, qty_left,
-                       unit_cost, settled, settle_date }] }
+#### `GET fin/stock-txns/available-lots?sym=KDH&on=2026-08-01`
+
+```json
+{ "sym": "KDH", "on": "2026-08-01", "qty_left_total": "1500",
+  "lots": [ { "buy_txn_id": "118", "buy_date": "2026-07-01", "buy_price": "17000.0000",
+              "qty_total": "500", "qty_matched": "0", "qty_left": "500",
+              "unit_cost": "17025.5000", "settled": true, "settle_date": "2026-07-03" } ] }
 ```
 
-Thứ tự trả về = đúng thứ tự engine C sẽ tự khớp, để UI hiện được "hệ thống sẽ chọn
-lô này" trước khi user quyết định ghim khác đi.
+`on` bỏ trống = hôm nay theo giờ VN. Lọc `buy_date <= on`.
+
+Endpoint này **phải** tồn tại vì `qty_left` là số client **không tự suy ra được**: nó
+phụ thuộc dòng khớp của *mọi* lệnh bán khác cùng mã, mà client chỉ thấy sổ lệnh.
+
+**Thứ tự trả về là HỢP ĐỒNG, không phải tiện lợi:** đúng thứ tự engine C sẽ tự khớp
+(giá vốn tăng dần), để UI hiện được "không ghim thì hệ thống chọn lô này". Test có
+dòng khẳng định lô endpoint xếp đầu đúng là lô hệ thống tự lấy, và khẳng định thứ tự
+này **khác** thứ tự ngày mua — nếu ai cài thành sắp theo ngày thì test đổ.
+
+Chỉ trả lô còn `qty_left > 0`; lô đã khớp hết không phải lựa chọn. Lô **chưa về
+(T+2) vẫn trả về và vẫn ghim được** — engine C không xét `settle` khi chọn lô (7.4),
+cờ `settled` chỉ để UI gắn badge.
+
+#### UI
+
+Form đặt lệnh BÁN có khối `LotPicker` với hai chế độ:
+
+- **Tự động** — bảng lô chỉ để xem, tô nhấn những lô hệ thống sẽ lấy và số lượng lấy
+  từ mỗi lô. Cảnh báo khi khối lượng bán vượt tổng còn chưa khớp.
+- **Ghim tay** — mỗi lô một ô nhập, kèm bộ đếm `Đã ghim x / y cp` và nút *Điền như
+  tự động* để chỉnh từ phân bổ mặc định thay vì gõ lại từ đầu.
+
+Chế độ Tự động **luôn hiện trước**, kể cả khi user định ghim tay: phải thấy "hệ thống
+sẽ chọn lô nào" mới biết mình đang ghim khác đi ở đâu, chứ không chọn trong bóng tối.
+
+Client kiểm `Σ ghim = qty` ngay tại form để user sửa được liền, nhưng đó là lớp
+**tiện dụng**, không phải lớp bảo đảm — backend vẫn kiểm lại và trả 400.
+
+Panel chi tiết lô ghi nhãn `ghim tay` khi lệnh có dòng `is_manual`, và **đổi cả câu
+mô tả**: nói "lô do bạn tự chọn" thay vì "lô rẻ nhất trước" — vì với lệnh ghim tay
+thì câu sau là **sai**, engine C có thể cho lãi *thấp* hơn engine B.
 
 ---
 
