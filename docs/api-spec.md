@@ -1321,7 +1321,7 @@ một đường lịch sử sai.
       `fin_quotes` — `last`/`prev_close` suy từ `fin_quote_history` (8.11)
 - [ ] **Đặt timezone WordPress = `Asia/Ho_Chi_Minh` TRƯỚC khi tin bất kỳ mốc thời
       gian nào** — để UTC thì cron sai giờ và lệch ngày lúc 00:00–07:00 (8.11)
-- [ ] Cron lấy giá EOD **14:50 giờ VN**, chỉ mã đang nắm; nguồn lỗi thì ghi log,
+- [ ] Cron lấy giá EOD **15:05 giờ VN**, chỉ mã đang nắm; nguồn lỗi thì ghi log,
       **không** ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
 - [ ] Cron **không ghi đè** dòng `source='manual'` — luật cốt lõi ở 8.11
 - [ ] Thiếu giá trả `null` + `is_stale`/`reason`; **không** dùng giá vốn thay giá TT
@@ -1340,7 +1340,7 @@ một đường lịch sử sai.
 | # | Vấn đề | Quyết định |
 |---|---|---|
 | a | Cách lấy giá | **Tự động lấy giá đóng cửa cuối ngày, nhập tay để bù khi thiếu** — chi tiết ở 8.11. Nhà cung cấp cụ thể **chưa chọn**; 8.11 mô tả hợp đồng adapter nên không phải chờ điều đó mới cài được phần còn lại |
-| b | Tần suất | **Cuối ngày (EOD)**, không realtime. Nạp lúc **14:50 giờ VN**, bỏ T7/CN và ngày lễ — xem 8.11 |
+| b | Tần suất | **Cuối ngày (EOD)**, không realtime. Nạp lúc **15:05 giờ VN**, bỏ T7/CN và ngày lễ — xem 8.11 |
 | c | Ngưỡng `is_stale` | **Theo phiên, không theo đồng hồ**: cũ khi phiên giao dịch gần nhất > `MAX(trade_date)` đang có. Không cần ngưỡng phút |
 | d | Một hay nhiều tài khoản tiền | **Còn mở** — xem 8.12 |
 
@@ -1405,12 +1405,12 @@ mọi thứ lệch 7 tiếng và **cron nạp giá nổ sai giờ**:
   wp_timezone()        = +00:00        (UTC)
   current_time(mysql)  = 2026-08-01 02:26
   giờ VN thật          = 2026-08-01 09:26
-  cron "14:50 giờ site" = 21:50 giờ VN   <-- 7 tiếng SAU khi thị trường đóng
+  cron "15:05 giờ site" = 22:05 giờ VN   <-- 7 tiếng SAU khi thị trường đóng
 ```
 
 Hai hệ quả, cái thứ hai âm thầm hơn:
 
-1. **Cron chạy sai giờ.** Đặt 14:50 mà thực tế nổ 21:50 giờ VN.
+1. **Cron chạy sai giờ.** Đặt 15:05 mà thực tế nổ 22:05 giờ VN.
 2. **Lệch ngày trong khoảng 00:00–07:00 giờ VN.** UTC chậm hơn VN 7 tiếng, nên một
    ghi chép lúc **06:00 ngày 02/08 giờ VN** sẽ được `current_time('Y-m-d')` đóng dấu
    là **01/08**. Ảnh hưởng `noted_at` của nhật ký, `created_at` mọi bảng, và
@@ -1430,14 +1430,19 @@ wp option update timezone_string Asia/Ho_Chi_Minh
 
 #### Cron
 
-- Chạy lúc **14:50 giờ VN**. Phiên ATC của HOSE và HNX kết thúc **14:45** nên giá
-  đóng cửa đã chốt tại thời điểm này.
+- Chạy lúc **15:05 giờ VN**, tức sau khi **mọi bảng** đã đóng:
+
+  | Bảng | Kết thúc |
+  |---|---|
+  | HOSE | ATC 14:45, thoả thuận tới 15:00 |
+  | HNX | ATC 14:45, PLO tới 15:00 |
+  | UPCOM | giao dịch tới 15:00 |
+
+  Chọn 15:05 thay vì 14:50 nên **không còn** vấn đề UPCOM lấy giá trong phiên —
+  một lịch duy nhất phục vụ được cả ba bảng.
 - Giờ đặt ở hằng số `GDSFIN_Market::CRON_TIME`, đổi được bằng filter
   `gdsfin_quote_cron_time`. Lịch **tự đặt lại** khi giờ cấu hình đổi — nếu chỉ đặt
   lịch một lần lúc bump DB version thì đổi hằng số sẽ không có tác dụng.
-- **UPCOM giao dịch tới 15:00**, nên mã UPCOM lấy lúc 14:50 là giá **trong phiên**,
-  chưa phải giá đóng cửa. Hiện chưa nắm mã UPCOM nào nên chưa ảnh hưởng; nếu có thì
-  cần lịch riêng sau 15:00 cho nhóm đó.
 - Chỉ lấy các mã **đang thực sự nắm giữ** (suy từ `fin_stock_txns`, `shares > 0`)
   cộng các mã có phiên checklist đang mở. Không quét cả sàn — vô ích và tốn quota.
 - Nguồn lỗi thì **ghi log và bỏ qua**, không ghi `close = 0` hay giá cũ dưới ngày mới.

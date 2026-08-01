@@ -39,12 +39,12 @@ class GDSFIN_Market {
     const CRON_HOOK = 'gdsfin_fetch_eod_quotes';
 
     /**
-     * Giờ chạy cron nạp giá, theo giờ site. 14:50 vì phiên ATC của HOSE/HNX kết
-     * thúc 14:45 nên giá đóng cửa đã chốt. Đổi được bằng filter dưới đây.
-     * LƯU Ý: UPCOM giao dịch tới 15:00 — mã UPCOM lấy lúc 14:50 là giá TRONG
-     * phiên, chưa phải giá đóng cửa (xem docs/api-spec.md mục 8.10b).
+     * Giờ chạy cron nạp giá, theo giờ site (phải là giờ VN — xem GDSFIN_Util::tz()).
+     * 15:05 là sau khi MỌI bảng đã đóng: HOSE/HNX chốt ATC 14:45 rồi thoả thuận tới
+     * 15:00, UPCOM giao dịch tới 15:00. Nên giá 15:05 là giá đóng cửa cho cả ba.
+     * Đổi được bằng filter 'gdsfin_quote_cron_time'.
      */
-    const CRON_TIME = '14:50';
+    const CRON_TIME = '15:05';
 
     /* ===================== BẢNG ===================== */
 
