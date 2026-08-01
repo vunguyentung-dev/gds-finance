@@ -272,6 +272,18 @@ class GDSFIN_Stock {
         // này về sau không bị tính lại nếu hằng số trong code thay đổi.
         self::ensure_rate_seeded($uid);
 
+        // --- engine C: ghim lô thủ công (mục 7.5) ---
+        // Kiểm TRƯỚC khi insert, để một mảng lot_matches sai không để lại lệnh rác.
+        $raw_lots = $b['lot_matches'] ?? null;
+        $pairs    = null;
+        if ($raw_lots !== null) {
+            if ($type !== 'sell') {
+                return new WP_Error('bad_lots', 'lot_matches chỉ dùng cho lệnh BÁN', ['status' => 400]);
+            }
+            $pairs = GDSFIN_Lots::validate_manual($uid, $sym, $date, $qty, $raw_lots);
+            if (is_wp_error($pairs)) return $pairs;
+        }
+
         $wpdb->insert(self::t_txn(), [
             'user_id'    => $uid,
             'sym'        => $sym,
@@ -283,7 +295,17 @@ class GDSFIN_Stock {
             'created_at' => GDSFIN_Util::now_mysql(),
         ]);
 
-        return rest_ensure_response(['id' => (string) $wpdb->insert_id]);
+        $new_id = (int) $wpdb->insert_id;
+
+        // Engine C chạy SAU khi sổ gốc đã ghi: nó là lớp dẫn xuất, không được là
+        // điều kiện để lệnh vào sổ. Ghim tay trước, rồi khớp lại phần auto của mã —
+        // lo luôn ca thêm lệnh LÙI NGÀY vào trước các lệnh bán đã khớp (mục 7.7).
+        if ($pairs !== null) GDSFIN_Lots::write_manual($new_id, $pairs);
+        GDSFIN_Lots::on_txn_created($uid, $sym, $date);
+
+        $res = ['id' => (string) $new_id];
+        if ($type === 'sell') $res['lot_matches_mode'] = $pairs === null ? 'auto' : 'manual';
+        return rest_ensure_response($res);
     }
 
     /** Không xóa cứng — giữ vết kiểm toán. */
@@ -291,7 +313,20 @@ class GDSFIN_Stock {
         global $wpdb;
         $uid = get_current_user_id();
         $id  = absint($req['id']);
-        $n   = $wpdb->query($wpdb->prepare(
+
+        $txn = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, sym, txn_type, txn_date FROM " . self::t_txn() . "
+              WHERE id = %d AND user_id = %d AND status = 'posted'", $id, $uid
+        ), ARRAY_A);
+        if (!$txn) {
+            return new WP_Error('not_found', 'Không tìm thấy giao dịch', ['status' => 404]);
+        }
+
+        // Chặn void lệnh MUA đang bị lệnh bán khớp vào (409) — mục 7.7.
+        $blocked = GDSFIN_Lots::guard_void($uid, $txn);
+        if (is_wp_error($blocked)) return $blocked;
+
+        $n = $wpdb->query($wpdb->prepare(
             "UPDATE " . self::t_txn() . "
                 SET status = 'void', voided_at = %s
               WHERE id = %d AND user_id = %d AND status = 'posted'",
@@ -300,6 +335,8 @@ class GDSFIN_Stock {
         if (!$n) {
             return new WP_Error('not_found', 'Không tìm thấy giao dịch', ['status' => 404]);
         }
+
+        GDSFIN_Lots::after_void($uid, $txn);
         return rest_ensure_response(['voided' => (int) $n]);
     }
 

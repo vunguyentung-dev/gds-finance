@@ -69,6 +69,27 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - DELETE fin/entries/{id}
 - GET    fin/summary?year=YYYY -> {year, years[], monthly[12]{in,out}, catTotals{}, inYear, outYear, net}
 
+## Endpoint cổ phiếu / thị trường (mục 3, 7, 8, 9 của docs/api-spec.md)
+- GET|POST   fin/stock-txns          POST nhận thêm lot_matches (tùy chọn, chỉ lệnh bán)
+- DELETE     fin/stock-txns/{id}     void lệnh mua đang bị khớp -> 409
+- GET        fin/stock-txns/{id}/lots  engine C: chi tiết lô + remaining (BẮT BUỘC đi kèm)
+- GET        fin/stock-summary       engine A (by_sym, cards) + engine B (flow, footer)
+- GET|POST   fin/rates
+- GET|POST   fin/symbols
+- GET        fin/quotes | fin/quotes/history | fin/quotes/gaps | fin/quotes/health
+- PUT        fin/quotes/manual · DELETE fin/quotes/manual/{sym}/{date} · POST fin/quotes/fetch
+- GET|POST   fin/dividends
+- GET|POST   fin/accounts · GET fin/cash
+- GET        fin/overview
+
+## BA ENGINE — không hợp nhất, mọi số hiện ra phải có NHÃN ENGINE
+- A bình quân gia quyền -> by_sym, cards
+- B FIFO khớp lô đã về  -> flow, footer
+- C khớp lô rẻ nhất trước (đích danh) -> fin/stock-txns/{id}/lots
+Ba engine ra BA số khác nhau trên cùng một lệnh bán. Đó là thiết kế, không phải bug.
+KHÔNG hiện matched_pl của engine C mà thiếu remaining: chênh lệch không mất đi,
+nó chuyển sang phần còn nắm.
+
 Giao dịch cổ phiếu (chi tiết + ví dụ response: docs/api-spec.md):
 - GET    fin/stock-txns[?include_void=1] -> [{id, sym, txn_type, txn_date, qty, price, net_price, net_value}]
 - POST   fin/stock-txns       body {sym, txn_type:'buy'|'sell', txn_date, qty, price(đồng/cp, chuỗi)}
@@ -153,10 +174,11 @@ Gap chính 14-16px, padding thẻ 18px.
 - KHÔNG thay đổi cấu hình WordPress (template trang, settings, plugin khác)
 - Cần làm những việc trên: MÔ TẢ cho người dùng tự thực hiện
 
-## Nới phạm vi tạm thời — để cài mục 8 và 9 của api-spec
-Được sửa backend/ CHỈ để cài mục 8 (giá EOD, tiền mặt, ngành, cổ tức) và
-mục 9 (hiển thị nguồn giá), trên nhánh riêng. Mục 8 và 9 đã cài xong.
-Mục 7 (engine C) chưa cài.
+## Nới phạm vi tạm thời — để cài mục 7, 8, 9 của api-spec
+Được sửa backend/ CHỈ để cài mục 7 (engine C khớp lô đích danh), mục 8 (giá EOD,
+tiền mặt, ngành, cổ tức) và mục 9 (hiển thị nguồn giá), trên nhánh riêng.
+Cả ba đã cài xong ở backend. Engine C CHƯA có UI — xem api-spec mục 7.11.
+Ràng buộc giữ nguyên: KHÔNG làm ĐỔI SỐ của fin/entries, fin/summary, và engine A/B.
 Bắt buộc: verify bằng dữ liệu thật đang có trong DB, in bảng đối chiếu
 "kỳ vọng vs thực tế". Không báo hoàn thành nếu còn dòng lệch.
 KHÔNG làm ĐỔI SỐ của endpoint fin/entries, fin/summary, và engine A/B
