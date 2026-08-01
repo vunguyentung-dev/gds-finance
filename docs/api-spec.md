@@ -754,7 +754,8 @@ POST fin/profile     body y hệt, lưu vào wp_usermeta
       (frontend bị chặn không được gọi endpoint ngoài danh sách đó)
 
 Mục **7 (engine C — khớp lô đích danh)** là phần bổ sung ĐỘC LẬP, chưa cài. Mục 1–6
-đã cài và verify 119 OK / 0 LỆCH. Trước khi cài mục 7 cần chốt ba điểm ở **7.9**.
+đã cài và verify 119 OK / 0 LỆCH. Ba quyết định thiết kế của mục 7 đã chốt ở **7.9**,
+spec đủ để cài.
 
 ---
 
@@ -802,11 +803,9 @@ CREATE TABLE {$p}fin_stock_lot_matches (
 (`price × (1 + buyFee của ngày mua)`), nên sửa biểu phí là số tự cập nhật theo.
 Lưu số đã tính thì nó đóng băng và lệch khỏi engine A/B.
 
-> **`is_manual` là cột tôi thêm ngoài schema bạn nêu.** Không có nó thì không phân
-> biệt được dòng nào do hệ thống tự khớp (được phép tính lại) và dòng nào user ghim
-> tay (không được tự đổi). Cần khi phải khớp lại — xem mục 7.7. Nếu bạn muốn đúng
-> ba cột như đã nêu thì bỏ `is_manual`, nhưng khi đó mọi lần khớp lại sẽ xoá luôn
-> lựa chọn thủ công của user.
+> **`is_manual` — ĐÃ CHỐT là có.** Nó phân biệt dòng do hệ thống tự khớp (được phép
+> tính lại) với dòng user ghim tay (không được tự đổi). Thiếu cột này thì mỗi lần
+> khớp lại sẽ xoá luôn lựa chọn thủ công của user — xem mục 7.7.
 
 **Không có `user_id`** — quyền sở hữu thuộc `fin_stock_txns`. Áp dụng nguyên tắc
 mục **0.2**: mọi endpoint đụng bảng này phải verify `sell_txn_id` thuộc user hiện
@@ -934,14 +933,19 @@ Vì vậy `remaining` là **phần bắt buộc** của response, và UI **khôn
 }
 ```
 
-> **Vướng: chưa có nguồn giá thị trường.** `unrealized_pl` cần giá hiện tại, mà màn
-> Bảng giá chưa làm và cần API ngoài. Spec này **không bịa** giá: khi không có giá,
+> **Chưa có nguồn giá thị trường — ĐÃ CHỐT: trả `null`, không bịa số.** `unrealized_pl`
+> cần giá hiện tại, mà màn Bảng giá chưa làm và cần API ngoài. Khi không có giá:
 > `market_price` và `unrealized_pl` trả `null`, UI hiện `—` kèm chú thích "cần giá
-> thị trường", **vẫn hiện `cost_basis` và `qty`** để người dùng thấy phần còn nắm.
-> Khi có nguồn giá:
+> thị trường", nhưng **vẫn phải hiện `qty` và `cost_basis`** để người dùng thấy phần
+> còn nắm. Tuyệt đối không lấy giá lệnh gần nhất làm giá thị trường.
+>
+> Khi màn Bảng giá có nguồn giá thật, công thức là:
 > `unrealized_pl = qty × market_price × (1 − sellFee − tax) − cost_basis`
-> (trừ sẵn phí bán để so cùng cơ sở với `matched_pl`).
-> Xem mục 7.9 điểm (b) — cần bạn quyết cách lấy giá.
+> — trừ sẵn phí bán để so cùng cơ sở với `matched_pl`.
+>
+> Hệ quả cần chấp nhận tới lúc đó: yêu cầu "bắt buộc hiện lãi/lỗ chưa thực hiện"
+> chỉ đáp ứng được **một nửa** (số lượng và giá vốn phần còn nắm), chưa ra được
+> con số lãi/lỗ. Nửa còn lại phụ thuộc màn Bảng giá.
 
 ### 7.7 Toàn vẹn dữ liệu
 
@@ -1022,16 +1026,12 @@ chỉ **dịch chuyển** lãi từ phần còn nắm sang phần đã chốt.
 `footer.cum_pl` ở CA2 vẫn phải là **`-230700.0000`** (engine B), **không** đổi theo
 engine C — đây là chốt kiểm cho ranh giới ở mục 7.1.
 
-### 7.9 Điểm cần bạn quyết
+### 7.9 Quyết định đã chốt
 
-**(a) `is_manual`** — thêm cột (khuyến nghị) hay giữ đúng ba cột như bạn nêu và
-chấp nhận mất lựa chọn thủ công mỗi lần khớp lại? Xem 7.2.
+| # | Vấn đề | Quyết định | Hệ quả |
+|---|---|---|---|
+| a | Cột `is_manual` | **CÓ** | Giữ được lựa chọn thủ công qua các lần khớp lại (7.7) |
+| b | `unrealized_pl` khi chưa có giá thị trường | **Trả `null`** | Không bịa số; phần lãi/lỗ chưa thực hiện chỉ đủ khi làm xong màn Bảng giá (7.6) |
+| c | `txn_date` cuối tuần | **Giữ nguyên, không chặn** | `2026-08-01` (thứ Bảy) vẫn nhập được, khớp hành vi prototype gốc |
 
-**(b) Nguồn giá thị trường cho `unrealized_pl`** — hiện chưa có. Ba hướng: trả
-`null` tới khi làm màn Bảng giá (spec này đang chọn), cho user tự nhập giá tham
-chiếu, hay dùng giá của lệnh gần nhất cùng mã làm tạm (số sẽ không phải giá thật,
-tôi không khuyến nghị).
-
-**(c) Ngày giao dịch cuối tuần** — `2026-08-01` là **thứ Bảy**. API hiện **không**
-chặn ngày cuối tuần cho `txn_date` (prototype gốc cũng không). Giữ nguyên, hay
-validate cảnh báo/chặn?
+Không còn điểm treo. Spec mục 7 đã đủ để cài.
