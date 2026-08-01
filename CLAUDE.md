@@ -79,6 +79,8 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - GET|POST   fin/rates
 - GET|POST   fin/symbols
 - GET        fin/quotes | fin/quotes/history | fin/quotes/gaps | fin/quotes/health
+             fin/quotes trả thêm band (biên phiên này) + next_band (phiên kế tiếp);
+             null khi chưa biết sàn hoặc chưa có TC — KHÔNG đoán biên HOSE
 - PUT        fin/quotes/manual · DELETE fin/quotes/manual/{sym}/{date} · POST fin/quotes/fetch
 - GET|POST   fin/dividends
 - GET|POST   fin/accounts · GET fin/cash
@@ -149,6 +151,13 @@ Lưu ý khi dựng UI Giao dịch: backend đã tính sẵn lãi/lỗ, client KH
 footer trả CẢ HAI số — cum_pl (engine FIFO, dùng cho chân bảng timeline) và
 total_realized (engine bình quân, dùng cho thẻ đầu màn) — kèm engines_diverge;
 khi engines_diverge=true PHẢI hiện cảnh báo, không được giấu.
+
+## Màn Bảng giá — xem api-spec mục 10
+Giá EOD, KHÔNG realtime. Trần/Sàn là số SUY RA từ TC theo biên độ sàn
+(HOSE 7% · HNX 10% · UPCOM 15%) + bước giá, không phải số lấy từ sàn.
+Cột KL để trống: fin_quote_history không có cột volume.
+Số Trần/Sàn trong ảnh thiết kế là hardcode và tự mâu thuẫn — KHÔNG sửa code cho
+khớp ảnh, xem bảng đối chiếu ở mục 10.1.
 
 ## Design token (theme Sáng)
 --bg #faf9f7 · --panel #ffffff · --sidebar #ffffff · --border #eceae6

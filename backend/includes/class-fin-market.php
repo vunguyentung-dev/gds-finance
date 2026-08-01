@@ -252,10 +252,99 @@ class GDSFIN_Market {
      * Trả `close_price` (không phải `close`) — đổi tên có chủ ý để mọi nơi hiển thị
      * giá buộc phải đi qua hợp đồng có nguồn, không lấy lẻ một con số rồi giấu nguồn.
      */
+    /* ===================== BIÊN ĐỘ GIÁ ===================== */
+
+    /**
+     * Biên độ dao động theo sàn. Không có sàn trong bảng này => KHÔNG đoán.
+     * (ETF/CW/ngày giao dịch đầu tiên có biên khác, chưa xử lý — xem ghi chú ở price_band.)
+     */
+    const BANDS = ['HOSE' => '7', 'HNX' => '10', 'UPCOM' => '15'];
+
+    /**
+     * Bước giá theo sàn, tính theo GIÁ THAM CHIẾU (đồng/cp).
+     * HOSE chia ba mức; HNX và UPCOM một mức 100đ.
+     */
+    public static function tick_size(string $exchange, string $ref): string {
+        if (strtoupper($exchange) === 'HOSE') {
+            if (bccomp($ref, '10000', 4) < 0) return '10';
+            if (bccomp($ref, '50000', 4) < 0) return '50';
+            return '100';
+        }
+        return '100';
+    }
+
+    /** Chia lấy phần nguyên (làm tròn xuống) cho số dương. */
+    private static function div_floor(string $a, string $b): string {
+        return bcdiv($a, $b, 0);
+    }
+
+    /** Chia làm tròn LÊN cho số dương. */
+    private static function div_ceil(string $a, string $b): string {
+        $q = bcdiv($a, $b, 0);
+        return bccomp(bcmul($q, $b, self::S), $a, self::S) < 0 ? bcadd($q, '1', 0) : $q;
+    }
+
+    /**
+     * Trần / Sàn của một phiên, tính từ GIÁ THAM CHIẾU của phiên đó.
+     *
+     * Trần = bội số bước giá LỚN NHẤT còn <= ref × (1 + biên)
+     * Sàn  = bội số bước giá NHỎ NHẤT còn >= ref × (1 − biên)
+     *
+     * KHÔNG port được từ prototype: ceil/floor ở đó là chuỗi hardcode và tự mâu thuẫn
+     * (FPT khớp làm-tròn-xuống, HPG khớp làm-tròn-gần-nhất), nên không có luật nào tái
+     * tạo được cả bộ. Đây là luật thật của HOSE/HNX/UPCOM.
+     *
+     * CHƯA xử lý: ETF, chứng quyền, ngày giao dịch đầu tiên, ngày sau hưởng quyền —
+     * các trường hợp đó có biên độ riêng. Sàn không nằm trong BANDS thì trả null chứ
+     * không đoán bằng biên của HOSE.
+     */
+    public static function price_band(?string $exchange, ?string $ref): ?array {
+        if ($ref === null || bccomp($ref, '0', 4) <= 0) return null;
+        $ex = strtoupper((string) $exchange);
+        if (!isset(self::BANDS[$ex])) return null;
+
+        $band = bcdiv(self::BANDS[$ex], '100', self::S);
+        $tick = self::tick_size($ex, $ref);
+
+        $hi = bcmul($ref, bcadd('1', $band, self::S), self::S);
+        $lo = bcmul($ref, bcsub('1', $band, self::S), self::S);
+
+        $ceiling = bcmul(self::div_floor($hi, $tick), $tick, self::S);
+        $floor   = bcmul(self::div_ceil($lo, $tick), $tick, self::S);
+
+        // Biên trùng giá tham chiếu (xảy ra khi biên nhỏ hơn một bước giá) thì phải
+        // lệch ra đúng một bước, nếu không thì mã đó "không được phép nhích".
+        if (bccomp($ceiling, $ref, 4) <= 0) $ceiling = bcadd($ref, $tick, self::S);
+        if (bccomp($floor, $ref, 4) >= 0)   $floor   = bcsub($ref, $tick, self::S);
+        if (bccomp($floor, $tick, 4) < 0)   $floor   = $tick;
+
+        return [
+            'ceiling'  => GDSFIN_Util::money_out($ceiling),
+            'floor'    => GDSFIN_Util::money_out($floor),
+            'band_pct' => GDSFIN_Util::pct_out(self::BANDS[$ex]),
+            'tick'     => GDSFIN_Util::money_out($tick),
+            'exchange' => $ex,
+        ];
+    }
+
+    /** Sàn của từng mã, đọc một lượt từ fin_symbols. Mã chưa khai báo -> null. */
+    private static function exchanges_of(array $syms): array {
+        global $wpdb;
+        if (!$syms) return [];
+        $ph   = implode(',', array_fill(0, count($syms), '%s'));
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT sym, exchange FROM " . self::t_sym() . " WHERE sym IN ($ph)", ...$syms
+        ), ARRAY_A) ?: [];
+        $out = [];
+        foreach ($rows as $r) $out[$r['sym']] = $r['exchange'];
+        return $out;
+    }
+
     public static function quotes_for(array $syms, ?string $as_of_session = null): array {
         global $wpdb;
         $t   = self::t_hist();
         $ltd = $as_of_session ?: self::last_trading_day();
+        $ex  = self::exchanges_of($syms);
         $out = [];
         foreach ($syms as $sym) {
             $rows = $wpdb->get_results($wpdb->prepare(
@@ -282,6 +371,12 @@ class GDSFIN_Market {
                 'trade_date'      => $cur['trade_date'],
                 'sessions_behind' => $behind,
                 'staleness'       => self::staleness_of($behind),
+                // Biên độ của CHÍNH phiên này => tính từ giá tham chiếu của nó, tức
+                // prev_close. Không có prev_close, hoặc mã chưa khai sàn => null.
+                'band'            => self::price_band($ex[$sym] ?? null, $prev ? $prev['close'] : null),
+                // Biên độ cho phiên KẾ TIẾP, tính từ giá đóng cửa vừa rồi. Đây là số
+                // dùng để đặt lệnh, khác 'band' ở trên — nên trả riêng, không gộp.
+                'next_band'       => self::price_band($ex[$sym] ?? null, $cur['close']),
             ];
         }
         return $out;
