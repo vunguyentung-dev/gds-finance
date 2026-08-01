@@ -79,6 +79,7 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - GET|POST   fin/rates
 - GET|POST   fin/symbols
 - GET        fin/quotes | fin/quotes/history | fin/quotes/gaps | fin/quotes/health
+             fin/quotes/history trả thêm coverage + indicators (MA20/MA50/RSI14/MACD)
              fin/quotes trả thêm band (biên phiên này) + next_band (phiên kế tiếp);
              null khi chưa biết sàn hoặc chưa có TC — KHÔNG đoán biên HOSE
 - PUT        fin/quotes/manual · DELETE fin/quotes/manual/{sym}/{date} · POST fin/quotes/fetch
@@ -164,8 +165,12 @@ Nhúng widget TradingView. TradingView KHÔNG cấp phép dữ liệu HOSE/HNX/U
 widget nhúng: mã đúng, tích hợp đúng (NASDAQ:AAPL dựng bình thường), nhưng biểu đồ
 bị thay bằng "Mã giao dịch này chỉ có trên TradingView". KHÔNG phải lỗi code —
 đừng đi sửa tên mã hay cấu hình widget. Đường dùng được: nút Mở trên TradingView.
-Ứng dụng KHÔNG tự tính RSI/MACD/MA: chỉ có giá đóng cửa, không đủ dữ liệu.
-Số RSI/MACD trong ảnh thiết kế cũng là chuỗi hardcode.
+Biểu đồ CHÍNH tự dựng từ fin_quote_history (api-spec mục 12); TradingView là nguồn
+PHỤ, mặc định đóng. Chỉ báo RSI/MACD/MA tính ở BACKEND từ chuỗi giá đóng cửa —
+chúng chỉ cần giá đóng cửa, cái thiếu là SỐ PHIÊN (RSI 15, MA20 20, MACD 26, tín
+hiệu 34). Thiếu phiên thì trả null + "cần N phiên, đang có M", KHÔNG bịa số.
+Không vẽ nến (thiếu mở/cao/thấp), không nội suy phiên trống.
+Số RSI/MACD trong ảnh thiết kế là chuỗi hardcode.
 
 ## Design token (theme Sáng)
 --bg #faf9f7 · --panel #ffffff · --sidebar #ffffff · --border #eceae6

@@ -428,3 +428,272 @@
   padding: 9px 12px;
   margin-bottom: 12px;
 }
+
+/* ---------- Biểu đồ tự dựng ---------- */
+
+.gf-an-badge.own {
+  background: var(--accentSoft);
+  color: var(--accentInk);
+}
+
+.gf-an-toggle {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.gf-an-tvbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.gf-an-seg.sm .gf-an-seg-btn {
+  padding: 6px 11px;
+  font-size: 11px;
+}
+
+.gf-ch-svg {
+  width: 100%;
+  height: 300px;
+  display: block;
+  cursor: crosshair;
+}
+
+.gf-ch-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.gf-ch-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gf-ch-key.off {
+  color: var(--muted2);
+}
+
+.gf-ch-key i {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top-width: 2px;
+  border-top-style: solid;
+}
+
+.gf-ch-key i.line { border-top-color: var(--accent); }
+.gf-ch-key i.ma20 { border-top-color: var(--up); border-top-style: dashed; }
+.gf-ch-key i.ma50 { border-top-color: var(--down); border-top-style: dotted; }
+
+.gf-ch-read {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gf-ch-read .strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.gf-ch-read .src {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted2);
+}
+
+.gf-ch-empty {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.65;
+  padding: 20px;
+}
+
+.gf-ch-empty > * {
+  max-width: 44ch;
+}
+
+.gf-ch-empty b {
+  color: var(--fg);
+  display: block;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.gf-ch-empty code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  background: var(--chip);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+/* ---------- Bảng chỉ báo ---------- */
+
+.gf-ind {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px;
+}
+
+.gf-ind-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.gf-ind-title {
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gf-ind-badge {
+  background: var(--accentSoft);
+  color: var(--accentInk);
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.gf-ind-cov {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted2);
+  text-align: right;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.gf-ind-row + .gf-ind-row {
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border2);
+}
+
+.gf-ind-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.gf-ind-name {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.gf-ind-val {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.gf-ind-val.up   { color: var(--up); }
+.gf-ind-val.down { color: var(--down); }
+.gf-ind-val.na   { color: var(--muted2); }
+
+.gf-ind-track {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--panel2);
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.gf-ind-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.gf-ind-fill.hot  { background: var(--down); }
+.gf-ind-fill.cold { background: var(--up); }
+.gf-ind-fill.mid  { background: oklch(0.7 0.03 80); }
+
+.gf-ind-why {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 5px;
+  line-height: 1.55;
+}
+
+.gf-ind-why.na {
+  color: var(--muted2);
+}
+
+/* Tổng hợp: luôn kèm cách đếm */
+.gf-ind-sum {
+  margin-top: 16px;
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: var(--panel2);
+}
+
+.gf-ind-sum.up   { background: var(--upSoft, var(--panel2)); }
+.gf-ind-sum.down { background: var(--downSoft, var(--panel2)); }
+
+.gf-ind-sum-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.gf-ind-sum-big {
+  font-size: 19px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.gf-ind-sum.up .gf-ind-sum-big   { color: var(--up); }
+.gf-ind-sum.down .gf-ind-sum-big { color: var(--down); }
+
+.gf-ind-sum-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.gf-ind-sum-list li.up b   { color: var(--up); }
+.gf-ind-sum-list li.down b { color: var(--down); }
+
+.gf-ind-sum-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 10px;
+  line-height: 1.6;
+}

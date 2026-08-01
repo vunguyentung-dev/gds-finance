@@ -62,3 +62,53 @@ export function getQuotes(syms: string[]) {
   const q = new URLSearchParams({ syms: syms.join(',') }).toString();
   return apiClient.get<QuotesResponse>(`fin/quotes?${q}`);
 }
+
+/* ===================== Lịch sử giá + chỉ báo (api-spec mục 11.6) ===================== */
+
+export interface HistoryPoint {
+  trade_date: string;
+  close_price: string;
+  source: string;
+  is_manual: boolean;
+  fetched_at: string | null;
+}
+
+/**
+ * Một chỉ báo. `series` thẳng hàng với `points`, `null` ở chỗ chưa đủ phiên.
+ * `available=false` thì `reason` nói rõ cần bao nhiêu phiên và đang có bao nhiêu —
+ * KHÔNG trả số tính từ dữ liệu thiếu.
+ */
+export interface Indicator {
+  series: (string | null)[];
+  latest: string | null;
+  available: boolean;
+  reason: string | null;
+}
+
+export interface Indicators {
+  sessions: number;
+  ma20: Indicator;
+  ma50: Indicator;
+  rsi14: Indicator;
+  macd: { line: Indicator; signal: Indicator; hist: Indicator };
+}
+
+export interface HistoryCoverage {
+  sessions: number;
+  from: string | null;
+  to: string | null;
+  manual: number;
+  auto: number;
+}
+
+export interface HistoryResponse {
+  sym: string;
+  points: HistoryPoint[];
+  coverage: HistoryCoverage;
+  indicators: Indicators;
+}
+
+export function getQuoteHistory(sym: string) {
+  const q = new URLSearchParams({ sym }).toString();
+  return apiClient.get<HistoryResponse>(`fin/quotes/history?${q}`);
+}
