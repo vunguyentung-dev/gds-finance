@@ -752,3 +752,286 @@ POST fin/profile     body y hệt, lưu vào wp_usermeta
       VD2 là ca duy nhất `engines_diverge = true`
 - [ ] Bổ sung endpoint mới vào danh sách "Endpoint hiện có" trong `CLAUDE.md`
       (frontend bị chặn không được gọi endpoint ngoài danh sách đó)
+
+Mục **7 (engine C — khớp lô đích danh)** là phần bổ sung ĐỘC LẬP, chưa cài. Mục 1–6
+đã cài và verify 119 OK / 0 LỆCH. Trước khi cài mục 7 cần chốt ba điểm ở **7.9**.
+
+---
+
+## 7. Engine C — khớp lô đích danh (LỚP THÔNG TIN)
+
+Trạng thái: **spec, chưa cài.** Mục 1–6 đã cài và verify xong; mục này là phần bổ
+sung độc lập.
+
+### 7.1 Vai trò và ranh giới
+
+Engine C **chỉ trả chi tiết** lệnh bán nào ăn vào lô mua nào. Nó **không được đụng
+vào bất kỳ số tổng nào**:
+
+| Thành phần | Nguồn số | Engine C có đổi? |
+|---|---|---|
+| Thẻ "Tổng lãi/lỗ đã thực hiện" | `cards.total_realized` — engine A | **KHÔNG** |
+| Cột "Lũy kế" trong timeline | `flow[].cum_pl` — engine B | **KHÔNG** |
+| Chân bảng timeline | `footer.cum_pl` — engine B | **KHÔNG** |
+| `by_sym`, `total_fees`, `engines_diverge` | engine A / B | **KHÔNG** |
+| Chi tiết lô của một lệnh bán | **engine C** | đây là phần duy nhất nó sinh ra |
+
+Hệ quả phải chấp nhận: giá vốn phần còn nắm theo engine C **sẽ lệch** so với
+`by_sym[].net_value` của engine A (bình quân gia quyền). Đây là bản chất của việc
+để ba cách nhìn cùng tồn tại, không phải bug. UI **phải ghi nhãn rõ** số nào của
+cách tính nào — cùng nguyên tắc đã áp cho `engines_diverge` ở mục 3.
+
+### 7.2 SQL
+
+```sql
+CREATE TABLE {$p}fin_stock_lot_matches (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  sell_txn_id  BIGINT UNSIGNED NOT NULL,        -- fin_stock_txns.id, txn_type='sell'
+  buy_txn_id   BIGINT UNSIGNED NOT NULL,        -- fin_stock_txns.id, txn_type='buy'
+  qty          BIGINT UNSIGNED NOT NULL,        -- số cp của lô này bị khớp
+  is_manual    TINYINT(1)      NOT NULL DEFAULT 0,
+  created_at   DATETIME        NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_sell_buy (sell_txn_id, buy_txn_id),
+  KEY idx_sell (sell_txn_id),
+  KEY idx_buy (buy_txn_id)
+) $charset;
+```
+
+**KHÔNG lưu `cost_matched`.** Giá vốn tính lúc đọc từ `buy_txn_id`
+(`price × (1 + buyFee của ngày mua)`), nên sửa biểu phí là số tự cập nhật theo.
+Lưu số đã tính thì nó đóng băng và lệch khỏi engine A/B.
+
+> **`is_manual` là cột tôi thêm ngoài schema bạn nêu.** Không có nó thì không phân
+> biệt được dòng nào do hệ thống tự khớp (được phép tính lại) và dòng nào user ghim
+> tay (không được tự đổi). Cần khi phải khớp lại — xem mục 7.7. Nếu bạn muốn đúng
+> ba cột như đã nêu thì bỏ `is_manual`, nhưng khi đó mọi lần khớp lại sẽ xoá luôn
+> lựa chọn thủ công của user.
+
+**Không có `user_id`** — quyền sở hữu thuộc `fin_stock_txns`. Áp dụng nguyên tắc
+mục **0.2**: mọi endpoint đụng bảng này phải verify `sell_txn_id` thuộc user hiện
+tại qua join `fin_stock_txns.user_id`, không thuộc thì trả **404** chứ không 403.
+
+### 7.3 Thuật toán khớp tự động
+
+Khi user không chỉ định tay:
+
+```
+1. Lấy các lô MUA cùng mã, status='posted', txn_date <= ngày bán,
+   còn hàng chưa bị khớp (qty mua − tổng qty đã khớp ở fin_stock_lot_matches)
+2. Sắp theo giá vốn TĂNG DẦN:  gross = price × (1 + buyFee(ngày mua))
+   Giá vốn bằng nhau -> lô có txn_date sớm hơn trước; vẫn bằng -> id nhỏ hơn trước
+3. Trừ lần lượt từ lô RẺ NHẤT sang lô ĐẮT NHẤT, mỗi lô lấy min(còn lại của lô, còn cần)
+4. Hết lô mà vẫn còn cần -> ghi phần khớp được, phần thiếu KHÔNG tạo dòng match
+   (nhất quán với engine B: bán vượt vẫn cho, chỉ cảnh báo)
+```
+
+Rẻ nhất trước nghĩa là **lãi cao nhất trước**. Đây là lựa chọn có hệ quả, xem 7.6.
+
+### 7.4 T+2 — không chặn, chỉ gắn cờ
+
+Khác engine B (lượt 1 ưu tiên lô đã về), engine C **không xét `settle` khi chọn
+lô**. Thứ tự chỉ theo giá vốn. Mỗi dòng khớp trả kèm:
+
+| Trường | Ý nghĩa |
+|---|---|
+| `settled` | `true` nếu `settle_date <= ngày bán`, ngược lại `false` |
+| `settle_date` | ngày hàng về của lô mua, tính lúc đọc (mục 2.4) |
+
+Lô chưa về **vẫn được tính lãi** — UI hiện badge "lô chưa về" để người dùng biết đó
+là lãi tạm, không chặn.
+
+### 7.5 Endpoint
+
+#### `GET fin/stock-txns/{id}/lots`
+
+`{id}` là **lệnh bán**. Lệnh mua trả `400`.
+
+```json
+{
+  "sell_txn_id": "3",
+  "sym": "KDH",
+  "txn_date": "2026-08-01",
+  "qty": "1000",
+  "price": "19000.0000",
+  "net_unit_price": "18952.5000",
+  "matched_qty": "1000",
+  "unmatched_qty": "0",
+  "matches": [
+    { "buy_txn_id": "2", "buy_date": "2026-07-21", "qty": "600",
+      "buy_price": "18100.0000", "unit_cost": "18127.1500",
+      "cost_matched": "10876290.0000", "pl": "495210.0000",
+      "settled": true, "settle_date": "2026-07-23", "is_manual": false },
+    { "buy_txn_id": "1", "buy_date": "2026-06-15", "qty": "400",
+      "buy_price": "19500.0000", "unit_cost": "19529.2500",
+      "cost_matched": "7811700.0000", "pl": "-230700.0000",
+      "settled": true, "settle_date": "2026-06-17", "is_manual": false }
+  ],
+  "matched_pl": "264510.0000",
+  "remaining": {
+    "qty": "0",
+    "cost_basis": "0.0000",
+    "market_price": null,
+    "unrealized_pl": null,
+    "lots": []
+  }
+}
+```
+
+`unit_cost = buy_price × (1 + buyFee(buy_date))` · `cost_matched = qty × unit_cost` ·
+`pl = qty × net_unit_price − cost_matched` · `matched_pl = Σ pl`.
+Sắp `matches` theo đúng thứ tự đã khớp (rẻ nhất trước).
+
+`matched_pl` **chỉ là thông tin của lệnh bán này**, không được cộng vào bất kỳ
+tổng nào của engine A/B.
+
+#### `POST fin/stock-txns` — thêm field tùy chọn
+
+```json
+{ "sym":"KDH", "txn_type":"sell", "txn_date":"2026-08-01",
+  "qty":"1000", "price":"19000",
+  "lot_matches": [ { "buy_txn_id":"2", "qty":"600" }, { "buy_txn_id":"1", "qty":"400" } ] }
+→ { "id":"3", "lot_matches_mode":"manual" }   // "auto" khi bỏ trống
+```
+
+Bỏ trống `lot_matches` → hệ thống tự khớp theo 7.3, các dòng ghi `is_manual = 0`.
+Có `lot_matches` → ghi `is_manual = 1`.
+
+Chỉ áp dụng cho `txn_type='sell'`; gửi kèm cho lệnh mua trả **400**.
+
+**Validate `lot_matches` (mọi lỗi trả 400, kèm lý do cụ thể):**
+
+- mỗi `buy_txn_id` phải thuộc **cùng user**, **cùng `sym`**, `txn_type='buy'`,
+  `status='posted'`
+- `buy_txn_id.txn_date <= txn_date` của lệnh bán (không khớp vào lô mua sau khi bán)
+- `qty` mỗi dòng > 0 và **≤ số còn chưa khớp** của lô đó
+- `buy_txn_id` không trùng nhau trong mảng
+- `Σ qty` phải **đúng bằng** `qty` của lệnh bán — thiếu hoặc thừa đều 400, không
+  tự bù phần còn lại
+
+### 7.6 BẮT BUỘC hiển thị kèm lãi/lỗ CHƯA thực hiện
+
+Khớp lô rẻ trước **luôn** làm sổ đã-chốt đẹp lên và đẩy lô giá cao ở lại danh mục.
+Chênh lệch không biến mất, nó chuyển sang phần còn nắm. Xem CA2 mục 7.8: engine C
+cho lãi cao hơn engine B đúng `560.840`, và giá vốn phần còn nắm cũng cao hơn đúng
+`560.840`. Bằng nhau tuyệt đối — đây là số học, không phải trùng hợp.
+
+Vì vậy `remaining` là **phần bắt buộc** của response, và UI **không được** hiện
+`matched_pl` mà thiếu nó:
+
+```json
+"remaining": {
+  "qty": "600",
+  "cost_basis": "11437130.0000",
+  "market_price": null,
+  "unrealized_pl": null,
+  "lots": [
+    { "buy_txn_id":"2", "buy_date":"2026-07-21", "qty":"200",
+      "unit_cost":"18127.1500", "cost_basis":"3625430.0000" },
+    { "buy_txn_id":"1", "buy_date":"2026-06-15", "qty":"400",
+      "unit_cost":"19529.2500", "cost_basis":"7811700.0000" }
+  ]
+}
+```
+
+> **Vướng: chưa có nguồn giá thị trường.** `unrealized_pl` cần giá hiện tại, mà màn
+> Bảng giá chưa làm và cần API ngoài. Spec này **không bịa** giá: khi không có giá,
+> `market_price` và `unrealized_pl` trả `null`, UI hiện `—` kèm chú thích "cần giá
+> thị trường", **vẫn hiện `cost_basis` và `qty`** để người dùng thấy phần còn nắm.
+> Khi có nguồn giá:
+> `unrealized_pl = qty × market_price × (1 − sellFee − tax) − cost_basis`
+> (trừ sẵn phí bán để so cùng cơ sở với `matched_pl`).
+> Xem mục 7.9 điểm (b) — cần bạn quyết cách lấy giá.
+
+### 7.7 Toàn vẹn dữ liệu
+
+Bảng nối tham chiếu hai dòng `fin_stock_txns`, nên có mấy trường hợp phải xử lý,
+nếu bỏ qua sẽ ra số vô nghĩa:
+
+| Tình huống | Xử lý |
+|---|---|
+| Void một lệnh **bán** | xoá các dòng match của nó (dữ liệu dẫn xuất, không phải sổ gốc) |
+| Void một lệnh **mua** đang bị khớp | trả **409**, nêu rõ `sell_txn_id` nào đang phụ thuộc; phải void lệnh bán trước |
+| Thêm lệnh **mua lùi ngày** trước một lệnh bán đã khớp | khớp lại các dòng `is_manual=0` của các lệnh bán cùng mã có `txn_date >= ngày mua mới`; **giữ nguyên** dòng `is_manual=1` |
+| Thêm lệnh **bán lùi ngày** | như trên; nếu lô bị vượt cấp phát thì khớp lại các dòng auto theo thứ tự ngày bán tăng dần |
+| Sửa biểu phí (`POST fin/rates`) | **không** cần khớp lại: thứ tự có thể đổi nhưng `cost_matched` tính lúc đọc nên số tự đúng. Nếu muốn thứ tự cũng đúng theo giá vốn mới thì khớp lại các dòng auto |
+
+Sau mọi lần khớp lại, `Σ qty` theo từng `buy_txn_id` phải **≤** `qty` của lệnh mua
+đó. Nên có một hàm kiểm tra bất biến này và gọi trong test.
+
+### 7.8 Ví dụ verify — ca KDH
+
+Điều kiện: biểu phí `2000-01-01 / 0.15 / 0.15 / 0.10` ⇒ `bf=sf=0.0015`, `tx=0.001`.
+`fin_market_holidays` rỗng.
+
+```
+id 1:  MUA  400 @ 19500 đồng/cp   ngày 2026-06-15 (thứ Hai)  -> hàng về 2026-06-17
+id 2:  MUA  600 @ 18100 đồng/cp   ngày 2026-07-21 (thứ Ba)   -> hàng về 2026-07-23
+id 3:  BÁN 1000 @ 19000 đồng/cp   ngày 2026-08-01 (thứ Bảy)
+```
+
+Giá vốn lô: `gross_A = 19500 × 1.0015 = 19.529,25` · `gross_B = 18100 × 1.0015 = 18.127,15`
+Đơn giá bán ròng: `19000 × 0.9975 = 18.952,50`
+
+#### CA1 — bán toàn bộ 1000 (đúng dữ liệu bạn nêu)
+
+| Chỉ số | Kỳ vọng |
+|---|---|
+| `cards.total_realized` (engine A) | `264510.0000` |
+| `by_sym[KDH].realized_pct` | `1.42` (chính xác `1.4154010…`) |
+| `by_sym[KDH].shares` / `avg_cost` | `0` / `null` (hết hàng) |
+| `cards.total_fees` | `75490.0000` |
+| `flow[2].t2_avail` / `t2_state` | `1000` / `ok` |
+| `flow[2].row_pl` (engine B) | `264510.0000` |
+| `footer.cum_pl` (engine B) | `264510.0000` |
+| `footer.engines_diverge` | `false` |
+| **engine C** `matched_pl` | `264510.0000` |
+| engine C match thứ 1 | `buy_txn_id 2`, qty `600`, cost `10876290.0000`, pl `495210.0000`, `settled true` |
+| engine C match thứ 2 | `buy_txn_id 1`, qty `400`, cost `7811700.0000`, pl `-230700.0000`, `settled true` |
+| `remaining.qty` / `cost_basis` | `0` / `0.0000` |
+
+> **CA1 KHÔNG phân biệt được engine C với engine B.** Lệnh bán ăn hết cả hai lô,
+> nên tổng giá vốn khớp giống nhau (`18.687.990`) và `matched_pl` giống nhau
+> (`264.510`) — chỉ **thứ tự liệt kê** khác (C: lô 2 trước; B: lô 1 trước). Nếu ai
+> cài engine C thành FIFO thì CA1 vẫn pass. Bắt buộc phải test thêm CA2.
+
+#### CA2 — bán MỘT PHẦN 400 @19000 (ca phân biệt B vs C)
+
+Cùng hai lệnh mua, thay `id 3` thành `BÁN 400 @ 19000 ngày 2026-08-01`.
+`proceeds = 400 × 18.952,50 = 7.581.000`
+
+| Chỉ số | Engine B (FIFO) | Engine C (rẻ nhất trước) |
+|---|---|---|
+| Lô bị khớp | `buy_txn_id 1` (mua sớm nhất) | `buy_txn_id 2` (giá vốn thấp nhất) |
+| `cost_matched` | `7811700.0000` | `7250860.0000` |
+| Lãi/lỗ của lệnh bán | **`-230700.0000`** (LỖ) | **`+330140.0000`** (LÃI) |
+| Còn nắm | `600` cp | `600` cp |
+| `remaining.cost_basis` | `10876290.0000` | `11437130.0000` |
+
+**Hai đẳng thức phải khớp, đây là chốt kiểm quan trọng nhất của engine C:**
+
+```
+chênh lãi/lỗ      = 330140 − (−230700) = 560840
+chênh giá vốn còn = 11437130 − 10876290 = 560840      -> BẰNG NHAU
+```
+
+Nếu hai số này không bằng nhau thì engine C cài sai. Và chính đẳng thức này là lý
+do `remaining` phải bắt buộc hiện kèm: engine C không tạo ra thêm đồng lãi nào, nó
+chỉ **dịch chuyển** lãi từ phần còn nắm sang phần đã chốt.
+
+`footer.cum_pl` ở CA2 vẫn phải là **`-230700.0000`** (engine B), **không** đổi theo
+engine C — đây là chốt kiểm cho ranh giới ở mục 7.1.
+
+### 7.9 Điểm cần bạn quyết
+
+**(a) `is_manual`** — thêm cột (khuyến nghị) hay giữ đúng ba cột như bạn nêu và
+chấp nhận mất lựa chọn thủ công mỗi lần khớp lại? Xem 7.2.
+
+**(b) Nguồn giá thị trường cho `unrealized_pl`** — hiện chưa có. Ba hướng: trả
+`null` tới khi làm màn Bảng giá (spec này đang chọn), cho user tự nhập giá tham
+chiếu, hay dùng giá của lệnh gần nhất cùng mã làm tạm (số sẽ không phải giá thật,
+tôi không khuyến nghị).
+
+**(c) Ngày giao dịch cuối tuần** — `2026-08-01` là **thứ Bảy**. API hiện **không**
+chặn ngày cuối tuần cho `txn_date` (prototype gốc cũng không). Giữ nguyên, hay
+validate cảnh báo/chặn?
