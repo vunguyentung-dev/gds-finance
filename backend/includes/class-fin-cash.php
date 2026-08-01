@@ -179,6 +179,13 @@ class GDSFIN_Cash {
         $bal = bcadd($opening, bcsub($dep, $wdr, self::S), self::S);
         $bal = bcadd(bcsub($bal, $buy, self::S), $sell, self::S);
 
+        $acc_count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM " . self::t_acc() . " WHERE user_id = %d AND is_active = 1", $uid
+        ));
+        $move_count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM " . self::t_txn() . " WHERE user_id = %d AND status = 'posted'", $uid
+        ));
+
         return [
             'opening_total'   => GDSFIN_Util::money_out($opening),
             'deposits'        => GDSFIN_Util::money_out($dep),
@@ -186,9 +193,14 @@ class GDSFIN_Cash {
             'stock_net_buy'   => GDSFIN_Util::money_out($buy),
             'stock_net_sell'  => GDSFIN_Util::money_out($sell),
             'balance'         => GDSFIN_Util::money_out($bal),
-            'account_count'   => (int) $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM " . self::t_acc() . " WHERE user_id = %d AND is_active = 1", $uid
-            )),
+            'account_count'   => $acc_count,
+            /**
+             * Chưa có tài khoản nào và chưa có nạp/rút thì `balance` KHÔNG phải số dư
+             * tiền mặt — nó chỉ là −(tiền đã đầu tư ròng vào cổ phiếu). Hiển thị con số
+             * đó dưới nhãn "Tiền mặt khả dụng" là sai và trông như đang âm nợ.
+             * Cờ này để phía đọc biết mà trả "không biết" thay vì một số gây hiểu nhầm.
+             */
+            'configured'      => ($acc_count > 0 || $move_count > 0),
             'as_of'           => current_time('mysql'),
         ];
     }

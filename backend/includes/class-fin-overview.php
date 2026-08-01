@@ -155,10 +155,16 @@ class GDSFIN_Overview {
         // ---- Thẻ KPI ----
         $miss_txt = $missing ? 'thiếu giá: ' . implode(', ', $missing) : null;
 
+        // Chưa thiết lập tài khoản tiền thì balance không có nghĩa là số dư (xem
+        // ghi chú 'configured' ở GDSFIN_Cash::summary), nên Tổng tài sản cũng chưa tính được.
+        $cash_ok  = !empty($cash['configured']);
+        $cash_why = 'chưa thiết lập tài khoản tiền — thêm ở màn Cài đặt';
+
+        $asset_ok = $all_priced && $cash_ok;
         $total_asset = self::card(
-            $all_priced ? GDSFIN_Util::money_out(bcadd($cash['balance'], $mkt_total, self::S)) : null,
-            $all_priced,
-            $all_priced ? null : $miss_txt
+            $asset_ok ? GDSFIN_Util::money_out(bcadd($cash['balance'], $mkt_total, self::S)) : null,
+            $asset_ok,
+            $asset_ok ? null : trim(($all_priced ? '' : $miss_txt . ' · ') . ($cash_ok ? '' : $cash_why), ' ·')
         );
 
         $sess_ok = $all_priced && $all_have_prev && $syms;
@@ -245,7 +251,7 @@ class GDSFIN_Overview {
                 'total_asset'          => $total_asset,
                 'last_session_pl'      => $last_session_pl,
                 'last_session_pl_pct'  => $last_session_pct,
-                'cash_available'       => self::card($cash['balance'], true, null),
+                'cash_available'       => self::card($cash['balance'], $cash_ok, $cash_ok ? null : $cash_why),
                 'dividend_year'        => $dividend_year,
                 'realized_pl'          => self::card($stock['cards']['total_realized'], true, null),
             ],
