@@ -54,8 +54,8 @@ class GDSFIN_Overview {
 
     private static function trading_days_between(string $from, string $to): int {
         $h = GDSFIN_Util::holidays();
-        $d = new DateTimeImmutable($from . ' 00:00:00', wp_timezone());
-        $e = new DateTimeImmutable($to . ' 00:00:00', wp_timezone());
+        $d = new DateTimeImmutable($from . ' 00:00:00', GDSFIN_Util::tz());
+        $e = new DateTimeImmutable($to . ' 00:00:00', GDSFIN_Util::tz());
         $n = 0;
         while ($d <= $e) {
             $wd = (int) $d->format('N');
@@ -181,7 +181,7 @@ class GDSFIN_Overview {
         );
 
         // Cổ tức dự kiến/năm — KHÁC cổ tức đã nhận đang ghi ở fin_personal (mục 8.7)
-        $year = (int) current_time('Y');
+        $year = GDSFIN_Util::year();
         $dps  = GDSFIN_Market::cash_dividend_per_share($syms, $year);
         $div_total = '0'; $has_div = false;
         foreach ($syms as $sym) {
@@ -216,7 +216,7 @@ class GDSFIN_Overview {
         // ---- Đường giá trị danh mục ----
         $days = max(1, min(365, (int) ($req->get_param('days') ?: 90)));
         $to   = $ltd;
-        $from = (new DateTimeImmutable($to . ' 00:00:00', wp_timezone()))->modify("-{$days} day")->format('Y-m-d');
+        $from = (new DateTimeImmutable($to . ' 00:00:00', GDSFIN_Util::tz()))->modify("-{$days} day")->format('Y-m-d');
         $txns = self::shares_timeline($uid);
 
         $dates = $wpdb->get_col($wpdb->prepare(
@@ -240,7 +240,7 @@ class GDSFIN_Overview {
         }
 
         return rest_ensure_response([
-            'as_of'            => current_time('mysql'),
+            'as_of'            => GDSFIN_Util::now_mysql(),
             'last_trading_day' => $ltd,
             'price_coverage'   => [
                 'held'    => count($syms),

@@ -71,7 +71,7 @@ class GDSFIN_Cash {
             'currency'    => strtoupper(substr(sanitize_text_field((string) ($b['currency'] ?? 'VND')), 0, 3)),
             'opening_bal' => bcadd($open, '0', 4),
             'is_active'   => 1,
-            'created_at'  => current_time('mysql'),
+            'created_at'  => GDSFIN_Util::now_mysql(),
         ]);
         return rest_ensure_response(['id' => (string) $wpdb->insert_id]);
     }
@@ -129,7 +129,7 @@ class GDSFIN_Cash {
             'amount'     => bcadd($amt, '0', 4),
             'note'       => sanitize_text_field((string) ($b['note'] ?? '')),
             'status'     => 'posted',
-            'created_at' => current_time('mysql'),
+            'created_at' => GDSFIN_Util::now_mysql(),
         ]);
         return rest_ensure_response(['id' => (string) $wpdb->insert_id]);
     }
@@ -201,7 +201,7 @@ class GDSFIN_Cash {
              * Cờ này để phía đọc biết mà trả "không biết" thay vì một số gây hiểu nhầm.
              */
             'configured'      => ($acc_count > 0 || $move_count > 0),
-            'as_of'           => current_time('mysql'),
+            'as_of'           => GDSFIN_Util::now_mysql(),
         ];
     }
 

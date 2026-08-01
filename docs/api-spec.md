@@ -1319,8 +1319,9 @@ một đường lịch sử sai.
 - [ ] 3 bảng tham chiếu ở 8.3 (`fin_symbols`, `fin_quote_history`, `fin_dividends`);
       **không** tạo mới `fin_accounts`/`fin_transactions`, cũng **không** tạo
       `fin_quotes` — `last`/`prev_close` suy từ `fin_quote_history` (8.11)
-- [ ] **Đặt timezone WordPress = `Asia/Ho_Chi_Minh` TRƯỚC khi tin bất kỳ mốc thời
-      gian nào** — để UTC thì cron sai giờ và lệch ngày lúc 00:00–07:00 (8.11)
+- [ ] Mọi mốc thời gian dùng `GDSFIN_Util::now_mysql()/today()/year()/tz()`, **không**
+      dùng `current_time()`/`wp_timezone()` — neo cứng GMT+7, không phụ thuộc setting
+      site (8.11). Ngoại lệ đã biết: `class-fin-personal.php` bị cấm sửa
 - [ ] Cron lấy giá EOD **15:05 giờ VN**, chỉ mã đang nắm; nguồn lỗi thì ghi log,
       **không** ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
 - [ ] Cron **không ghi đè** dòng `source='manual'` — luật cốt lõi ở 8.11
@@ -1395,38 +1396,61 @@ interface GDSFIN_Quote_Source {
 Nguồn nào cũng phải kiểm trước: điều khoản sử dụng có cho dùng kiểu này không,
 giới hạn số lần gọi, và có đủ mã mình cần không.
 
-#### ĐIỀU KIỆN TIÊN QUYẾT: timezone của WordPress phải là `Asia/Ho_Chi_Minh`
+#### Múi giờ: neo cứng GIỜ VIỆT NAM trong code, KHÔNG dựa vào setting site
 
-Toàn bộ mục 8 và 9 dựa vào `current_time()` và `wp_timezone()`. Nếu site để UTC thì
-mọi thứ lệch 7 tiếng và **cron nạp giá nổ sai giờ**:
+Mọi mốc thời gian nghiệp vụ dùng `GDSFIN_Util::tz()` = **`Asia/Ho_Chi_Minh` (GMT+7)**,
+**không** dùng `wp_timezone()` / `current_time()`.
 
-```
-Đo trên môi trường local ngày 2026-08-01:
-  wp_timezone()        = +00:00        (UTC)
-  current_time(mysql)  = 2026-08-01 02:26
-  giờ VN thật          = 2026-08-01 09:26
-  cron "15:05 giờ site" = 22:05 giờ VN   <-- 7 tiếng SAU khi thị trường đóng
-```
+| Thay cho | Dùng |
+|---|---|
+| `current_time('mysql')` | `GDSFIN_Util::now_mysql()` |
+| `current_time('Y-m-d')` | `GDSFIN_Util::today()` |
+| `(int) current_time('Y')` | `GDSFIN_Util::year()` |
+| `wp_timezone()` | `GDSFIN_Util::tz()` |
 
-Hai hệ quả, cái thứ hai âm thầm hơn:
+Đổi được bằng filter `gdsfin_timezone` nếu sau này phục vụ thị trường khác.
 
-1. **Cron chạy sai giờ.** Đặt 15:05 mà thực tế nổ 22:05 giờ VN.
-2. **Lệch ngày trong khoảng 00:00–07:00 giờ VN.** UTC chậm hơn VN 7 tiếng, nên một
-   ghi chép lúc **06:00 ngày 02/08 giờ VN** sẽ được `current_time('Y-m-d')` đóng dấu
-   là **01/08**. Ảnh hưởng `noted_at` của nhật ký, `created_at` mọi bảng, và
-   `last_trading_day()`. Tệ hơn: form ở frontend mặc định ngày theo **giờ trình
-   duyệt** (đúng giờ VN), còn backend đóng dấu theo **UTC** — hai bên lệch nhau.
-
-Sửa bằng cấu hình WordPress, **không phải code**:
+**Vì sao không dựa vào setting site.** Đo trên môi trường local ngày 2026-08-01,
+site đang để UTC:
 
 ```
-Settings → General → Timezone = Asia/Ho_Chi_Minh
-# hoặc
-wp option update timezone_string Asia/Ho_Chi_Minh
+  wp_timezone()          = +00:00           (UTC)
+  current_time(mysql)    = 2026-08-01 02:26
+  giờ VN thật            = 2026-08-01 09:26
+  cron "15:05 giờ site"  = 22:05 giờ VN     <-- 7 tiếng SAU khi thị trường đóng
 ```
 
-> Đây là thay đổi cấu hình WordPress nên người dùng tự thực hiện. Chưa sửa thì mọi
-> mốc thời gian trong app vẫn lệch 7 tiếng, dù code đúng.
+Hai hệ quả nếu để phụ thuộc setting, cái thứ hai âm thầm hơn:
+
+1. **Cron nổ sai giờ.** Đặt 15:05 mà thực tế 22:05 giờ VN.
+2. **Lệch cả NGÀY trong khoảng 00:00–07:00 giờ VN.** UTC chậm hơn VN 7 tiếng nên
+   một ghi chép lúc **06:00 ngày 02/08 giờ VN** bị đóng dấu **01/08**:
+
+   ```
+   thời điểm thật (VN)      = 2026-08-02 06:00
+   cùng lúc đó theo UTC     = 2026-08-01 23:00
+   current_time('Y-m-d')    = 2026-08-01   <-- LỆCH NGÀY
+   GDSFIN_Util::today()     = 2026-08-02   <-- ĐÚNG
+   ```
+
+   Ảnh hưởng `noted_at` của nhật ký, `done_at` của checklist, `last_trading_day()`.
+   Tệ hơn: form frontend mặc định ngày theo **giờ trình duyệt** trong khi backend
+   đóng dấu theo **UTC** — hai bên lệch nhau mà không ai báo lỗi.
+
+Frontend cũng neo giờ VN: `todayIso()` trong `lib/format.ts` dùng
+`Intl.DateTimeFormat` với `timeZone: 'Asia/Ho_Chi_Minh'` thay vì giờ máy người dùng.
+
+> **Setting timezone của site KHÔNG cần đổi.** Neo cứng trong code nên số liệu đúng
+> bất kể site để múi giờ nào, và không ai đổi setting về sau mà làm sai dữ liệu được.
+> Nếu vẫn muốn đổi setting cho WordPress core (dấu thời gian bài viết, log) thì cứ
+> đổi — hai bên sẽ trùng nhau, không gây lệch kép.
+
+> **NGOẠI LỆ CÒN LẠI: `class-fin-personal.php`.** File này bị CLAUDE.md cấm sửa nên
+> còn 3 chỗ dùng `current_time()`: mặc định `entry_date` (dòng 107), `created_at`
+> (dòng 116), và năm mặc định của `summary()` khi chưa có dữ liệu (dòng 147). Tác
+> động thực tế nhỏ — UI luôn gửi `entry_date`, `created_at` chỉ là metadata — nhưng
+> đây là chỗ duy nhất trong app còn đóng dấu theo giờ site. Muốn dọn hết thì cần bỏ
+> ràng buộc "không đụng class-fin-personal.php".
 
 #### Cron
 

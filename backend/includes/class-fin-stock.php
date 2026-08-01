@@ -128,7 +128,7 @@ class GDSFIN_Stock {
             "INSERT IGNORE INTO $t (user_id, eff_date, buy_fee, sell_fee, tax, created_at)
              VALUES (%d, %s, %s, %s, %s, %s)",
             $uid, self::SEED_EFF_DATE, self::SEED_BUY_FEE, self::SEED_SELL_FEE, self::SEED_TAX,
-            current_time('mysql')
+            GDSFIN_Util::now_mysql()
         ));
     }
 
@@ -170,7 +170,7 @@ class GDSFIN_Stock {
      * thêm cho mục 8 dùng, không thay đổi bất kỳ phép tính nào của engine A/B.
      */
     public static function rate_at(int $uid, ?string $d = null): array {
-        return self::rate_for(self::load_rates($uid), $d ?: current_time('Y-m-d'));
+        return self::rate_for(self::load_rates($uid), $d ?: GDSFIN_Util::today());
     }
 
     public static function list_rates(WP_REST_Request $req) {
@@ -221,7 +221,7 @@ class GDSFIN_Stock {
             number_format((float) $b['buy_fee'], 5, '.', ''),
             number_format((float) $b['sell_fee'], 5, '.', ''),
             number_format((float) $b['tax'], 5, '.', ''),
-            current_time('mysql')
+            GDSFIN_Util::now_mysql()
         ));
 
         return rest_ensure_response([
@@ -280,7 +280,7 @@ class GDSFIN_Stock {
             'qty'        => $qty,
             'price'      => bcadd($price, '0', 4),
             'status'     => 'posted',
-            'created_at' => current_time('mysql'),
+            'created_at' => GDSFIN_Util::now_mysql(),
         ]);
 
         return rest_ensure_response(['id' => (string) $wpdb->insert_id]);
@@ -295,7 +295,7 @@ class GDSFIN_Stock {
             "UPDATE " . self::t_txn() . "
                 SET status = 'void', voided_at = %s
               WHERE id = %d AND user_id = %d AND status = 'posted'",
-            current_time('mysql'), $id, $uid
+            GDSFIN_Util::now_mysql(), $id, $uid
         ));
         if (!$n) {
             return new WP_Error('not_found', 'Không tìm thấy giao dịch', ['status' => 404]);
