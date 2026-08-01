@@ -95,6 +95,33 @@ Cài đặt:
 - GET    fin/profile          -> {name, broker, account}
 - POST   fin/profile          body {name, broker, account}
 
+Dữ liệu thị trường (mục 8 của docs/api-spec.md):
+- GET    fin/symbols[?exchange=&vn30=1&q=] -> [{sym, name, exchange, sector, in_vn30}]
+- POST   fin/symbols          body {sym, name, exchange, sector, in_vn30}   (upsert)
+- GET    fin/quotes?syms=A,B  -> {as_of, last_trading_day, is_stale, stale_reason, quotes{}}
+                                 mã thiếu giá trả null — KHÔNG lấy giá vốn thay thế
+- GET    fin/quotes/history?sym=&from=&to=
+- GET    fin/quotes/gaps      -> mã đang nắm thiếu giá phiên gần nhất
+- PUT    fin/quotes/manual    body {quotes:[{sym, trade_date, close}]}  (ghi source='manual')
+- DELETE fin/quotes/manual/{sym}/{date}
+- POST   fin/quotes/fetch     -> chạy tay đợt nạp giá EOD
+- GET    fin/dividends[?syms=&year=]
+- POST   fin/dividends        body {sym, ex_date, kind, cash_per_share|stock_ratio}
+
+Tiền mặt tài khoản chứng khoán:
+- GET/POST fin/accounts       -> [{id, name, acc_type, currency, opening_bal, is_active}]
+- GET/POST fin/cash-movements body {account_id, txn_date, direction:'in'|'out', amount, note}
+- DELETE   fin/cash-movements/{id}  -> {voided:1}
+- GET      fin/cash-summary   -> balance TÍNH lúc đọc, không cộng fin_personal vào
+
+Tổng quan:
+- GET fin/overview[?days=90]  -> {price_coverage, cards, holdings[], sector_alloc[],
+                                  portfolio_series[], series_coverage, cash}
+  Mọi thẻ dạng {value, available, reason} — phân biệt "bằng 0" với "không biết".
+  Thẻ là "Lãi/lỗ phiên gần nhất", KHÔNG phải "hôm nay" (dữ liệu EOD).
+  holdings: market_value chưa trừ phí · exit_fee_est · unrealized_pl đã trừ phí bán.
+  total_asset dùng market_value CHƯA trừ phí.
+
 Lưu ý khi dựng UI Giao dịch: backend đã tính sẵn lãi/lỗ, client KHÔNG tự tính.
 footer trả CẢ HAI số — cum_pl (engine FIFO, dùng cho chân bảng timeline) và
 total_realized (engine bình quân, dùng cho thẻ đầu màn) — kèm engines_diverge;
