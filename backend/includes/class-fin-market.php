@@ -38,6 +38,14 @@ class GDSFIN_Market {
     const S = GDSFIN_Util::S;
     const CRON_HOOK = 'gdsfin_fetch_eod_quotes';
 
+    /**
+     * Giờ chạy cron nạp giá, theo giờ site. 14:50 vì phiên ATC của HOSE/HNX kết
+     * thúc 14:45 nên giá đóng cửa đã chốt. Đổi được bằng filter dưới đây.
+     * LƯU Ý: UPCOM giao dịch tới 15:00 — mã UPCOM lấy lúc 14:50 là giá TRONG
+     * phiên, chưa phải giá đóng cửa (xem docs/api-spec.md mục 8.10b).
+     */
+    const CRON_TIME = '14:50';
+
     /* ===================== BẢNG ===================== */
 
     public static function create_tables() {
@@ -444,10 +452,28 @@ class GDSFIN_Market {
     }
 
     /** Đặt cron chạy sau phiên. Xem cảnh báo về WP-Cron ở mục 8.11. */
+    private static function cron_time(): string {
+        $t = (string) apply_filters('gdsfin_quote_cron_time', self::CRON_TIME);
+        return preg_match('/^\d{2}:\d{2}$/', $t) ? $t : self::CRON_TIME;
+    }
+
+    /**
+     * Đặt cron chạy sau khi ATC chốt. Nếu lịch đang đăng ký lệch giờ cấu hình thì
+     * ĐẶT LẠI — nếu chỉ `return` khi đã có lịch thì đổi CRON_TIME sẽ không có tác
+     * dụng và cron cứ nổ theo giờ cũ mãi.
+     */
     public static function schedule_cron() {
-        if (wp_next_scheduled(self::CRON_HOOK)) return;
         $tz   = wp_timezone();
-        $next = new DateTimeImmutable('today 15:30', $tz);
+        $time = self::cron_time();
+        $existing = wp_next_scheduled(self::CRON_HOOK);
+
+        if ($existing) {
+            $cur = (new DateTimeImmutable('@' . $existing))->setTimezone($tz)->format('H:i');
+            if ($cur === $time) return;              // đã đúng giờ, không làm gì
+            wp_unschedule_event($existing, self::CRON_HOOK);
+        }
+
+        $next = new DateTimeImmutable("today $time", $tz);
         if ($next->getTimestamp() <= time()) $next = $next->modify('+1 day');
         wp_schedule_event($next->getTimestamp(), 'daily', self::CRON_HOOK);
     }

@@ -1319,8 +1319,10 @@ một đường lịch sử sai.
 - [ ] 3 bảng tham chiếu ở 8.3 (`fin_symbols`, `fin_quote_history`, `fin_dividends`);
       **không** tạo mới `fin_accounts`/`fin_transactions`, cũng **không** tạo
       `fin_quotes` — `last`/`prev_close` suy từ `fin_quote_history` (8.11)
-- [ ] Cron lấy giá EOD sau 15:30, chỉ mã đang nắm; nguồn lỗi thì ghi log, **không**
-      ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
+- [ ] **Đặt timezone WordPress = `Asia/Ho_Chi_Minh` TRƯỚC khi tin bất kỳ mốc thời
+      gian nào** — để UTC thì cron sai giờ và lệch ngày lúc 00:00–07:00 (8.11)
+- [ ] Cron lấy giá EOD **14:50 giờ VN**, chỉ mã đang nắm; nguồn lỗi thì ghi log,
+      **không** ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
 - [ ] Cron **không ghi đè** dòng `source='manual'` — luật cốt lõi ở 8.11
 - [ ] Thiếu giá trả `null` + `is_stale`/`reason`; **không** dùng giá vốn thay giá TT
 - [ ] `unrealized_pl` trừ phí bán ước tính, `total_asset` thì **không** trừ (8.8)
@@ -1338,7 +1340,7 @@ một đường lịch sử sai.
 | # | Vấn đề | Quyết định |
 |---|---|---|
 | a | Cách lấy giá | **Tự động lấy giá đóng cửa cuối ngày, nhập tay để bù khi thiếu** — chi tiết ở 8.11. Nhà cung cấp cụ thể **chưa chọn**; 8.11 mô tả hợp đồng adapter nên không phải chờ điều đó mới cài được phần còn lại |
-| b | Tần suất | **Cuối ngày (EOD)**, không realtime |
+| b | Tần suất | **Cuối ngày (EOD)**, không realtime. Nạp lúc **14:50 giờ VN**, bỏ T7/CN và ngày lễ — xem 8.11 |
 | c | Ngưỡng `is_stale` | **Theo phiên, không theo đồng hồ**: cũ khi phiên giao dịch gần nhất > `MAX(trade_date)` đang có. Không cần ngưỡng phút |
 | d | Một hay nhiều tài khoản tiền | **Còn mở** — xem 8.12 |
 
@@ -1393,9 +1395,49 @@ interface GDSFIN_Quote_Source {
 Nguồn nào cũng phải kiểm trước: điều khoản sử dụng có cho dùng kiểu này không,
 giới hạn số lần gọi, và có đủ mã mình cần không.
 
+#### ĐIỀU KIỆN TIÊN QUYẾT: timezone của WordPress phải là `Asia/Ho_Chi_Minh`
+
+Toàn bộ mục 8 và 9 dựa vào `current_time()` và `wp_timezone()`. Nếu site để UTC thì
+mọi thứ lệch 7 tiếng và **cron nạp giá nổ sai giờ**:
+
+```
+Đo trên môi trường local ngày 2026-08-01:
+  wp_timezone()        = +00:00        (UTC)
+  current_time(mysql)  = 2026-08-01 02:26
+  giờ VN thật          = 2026-08-01 09:26
+  cron "14:50 giờ site" = 21:50 giờ VN   <-- 7 tiếng SAU khi thị trường đóng
+```
+
+Hai hệ quả, cái thứ hai âm thầm hơn:
+
+1. **Cron chạy sai giờ.** Đặt 14:50 mà thực tế nổ 21:50 giờ VN.
+2. **Lệch ngày trong khoảng 00:00–07:00 giờ VN.** UTC chậm hơn VN 7 tiếng, nên một
+   ghi chép lúc **06:00 ngày 02/08 giờ VN** sẽ được `current_time('Y-m-d')` đóng dấu
+   là **01/08**. Ảnh hưởng `noted_at` của nhật ký, `created_at` mọi bảng, và
+   `last_trading_day()`. Tệ hơn: form ở frontend mặc định ngày theo **giờ trình
+   duyệt** (đúng giờ VN), còn backend đóng dấu theo **UTC** — hai bên lệch nhau.
+
+Sửa bằng cấu hình WordPress, **không phải code**:
+
+```
+Settings → General → Timezone = Asia/Ho_Chi_Minh
+# hoặc
+wp option update timezone_string Asia/Ho_Chi_Minh
+```
+
+> Đây là thay đổi cấu hình WordPress nên người dùng tự thực hiện. Chưa sửa thì mọi
+> mốc thời gian trong app vẫn lệch 7 tiếng, dù code đúng.
+
 #### Cron
 
-- Chạy **sau khi phiên kết thúc**. Sàn VN khớp ATC tới ~14:45, nên 15:30 là an toàn.
+- Chạy lúc **14:50 giờ VN**. Phiên ATC của HOSE và HNX kết thúc **14:45** nên giá
+  đóng cửa đã chốt tại thời điểm này.
+- Giờ đặt ở hằng số `GDSFIN_Market::CRON_TIME`, đổi được bằng filter
+  `gdsfin_quote_cron_time`. Lịch **tự đặt lại** khi giờ cấu hình đổi — nếu chỉ đặt
+  lịch một lần lúc bump DB version thì đổi hằng số sẽ không có tác dụng.
+- **UPCOM giao dịch tới 15:00**, nên mã UPCOM lấy lúc 14:50 là giá **trong phiên**,
+  chưa phải giá đóng cửa. Hiện chưa nắm mã UPCOM nào nên chưa ảnh hưởng; nếu có thì
+  cần lịch riêng sau 15:00 cho nhóm đó.
 - Chỉ lấy các mã **đang thực sự nắm giữ** (suy từ `fin_stock_txns`, `shares > 0`)
   cộng các mã có phiên checklist đang mở. Không quét cả sàn — vô ích và tốn quota.
 - Nguồn lỗi thì **ghi log và bỏ qua**, không ghi `close = 0` hay giá cũ dưới ngày mới.
@@ -1615,13 +1657,24 @@ GET fin/quotes/health -> [{ source, last_ok_at, last_error_at, last_error, ok_ra
 
 ### 9.7 Điểm cần bạn quyết
 
-**(a) `SSI` trong ví dụ có phải là chốt nhà cung cấp?** Bạn viết `SSI` làm ví dụ
-nguồn. Tôi **không** coi đó là đã chốt mục 8.12(e), vì trước khi dùng vẫn phải
-kiểm ba thứ: điều khoản sử dụng có cho phép dùng kiểu này, giới hạn số lần gọi, và
-độ phủ mã. Nếu bạn đã kiểm và chốt SSI thì nói để tôi ghi vào spec.
+**(a) Nhà cung cấp — CHƯA CHỐT, đang xin quyền.** `SSI` trong ví dụ chuỗi hiển thị
+chỉ là minh hoạ định dạng, không phải quyết định. Ba nơi đang xin: SSI, VPS, TCBS.
+Với mỗi nơi vẫn cần kiểm trước khi cắm vào: điều khoản sử dụng có cho phép dùng
+theo cách này, giới hạn số lần gọi, và độ phủ mã mình cần.
 
-**(b) Ba nguồn cụ thể là gì và thứ tự ưu tiên?** Chuỗi dự phòng cần biết tên và
-thứ tự. Chưa có thì tôi cài khung chuỗi trước, cắm nguồn sau.
+**(b) Ba nguồn — ĐÃ BIẾT TÊN, chưa có quyền truy cập.** Người dùng có tài khoản ở
+**SSI**, **VPS**, **TCBS** và đang xin quyền dùng API. **Thứ tự ưu tiên chưa chốt.**
+
+Vì vậy làm theo hai bước:
+
+1. Cài **khung chuỗi nguồn** (filter `gdsfin_quote_sources`) + nhập tay bù. Chạy
+   được ngay, không phụ thuộc bên nào.
+2. Khi có quyền từng nơi thì thêm một class thoả `GDSFIN_Quote_Source` cho nơi đó
+   và đưa vào danh sách. Thứ tự ưu tiên đặt bằng thứ tự trong mảng, đổi được không
+   cần sửa code lõi.
+
+Chưa xin được nơi nào thì app vẫn dùng được hoàn toàn bằng giá nhập tay — chỉ là
+phải nhập mỗi phiên.
 
 **(c) Ngưỡng `stale` = 3 phiên có áp cho cả `sparkline` và biểu đồ không?** Hiện
 biểu đồ chỉ báo `x/y phiên có đủ giá`. Có cần thêm `⚠` khi điểm cuối cũ ≥ 3 phiên?
