@@ -1,6 +1,9 @@
 export interface GdsFinConfig {
   restUrl: string;
   nonce: string;
+  /** wp_localize_script có truyền, nhưng không phải lúc nào cũng có. */
+  user?: string;
+  version?: string;
 }
 
 declare global {

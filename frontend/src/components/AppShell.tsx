@@ -6,6 +6,7 @@ import { FinanceScreen } from '../screens/finance/FinanceScreen';
 import { TradeScreen } from '../screens/trade/TradeScreen';
 import { JournalScreen } from '../screens/journal/JournalScreen';
 import { ChecklistScreen } from '../screens/checklist/ChecklistScreen';
+import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { titles, type Screen } from '../lib/nav';
 import { themeVars, type ThemeName } from '../lib/theme';
 
@@ -34,6 +35,8 @@ export function AppShell({ screen, theme, onNavigate, onToggleTheme }: AppShellP
             <JournalScreen />
           ) : screen === 'checklist' ? (
             <ChecklistScreen />
+          ) : screen === 'settings' ? (
+            <SettingsScreen />
           ) : (
             <ScreenPlaceholder />
           )}
