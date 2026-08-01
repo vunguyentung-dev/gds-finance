@@ -164,7 +164,7 @@ export function OverviewScreen() {
       <KpiCards ov={ov} />
 
       <div className="gf-ov-row">
-        <PortfolioChart points={ov.portfolio_series} coverage={ov.series_coverage} />
+        <PortfolioChart points={ov.portfolio_series} coverage={ov.series_coverage} stale={ov.series_stale} />
         <SectorAlloc slices={ov.sector_alloc} pricedCount={cov.priced} />
       </div>
 

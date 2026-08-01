@@ -1,9 +1,12 @@
 import type { SeriesPoint } from '../../api/overview';
+import type { Staleness } from '../../lib/price';
 import { formatDateVN, toDong } from '../../lib/format';
 
 interface Props {
   points: SeriesPoint[];
   coverage: { points: number; trading_days: number; from: string; to: string };
+  /** Điểm cuối cũ mấy phiên — mục 9.4, hiện ⚠ khi >= 3 phiên. */
+  stale: Staleness;
 }
 
 const W = 600;
@@ -14,7 +17,7 @@ const PAD = 4;
  * Biểu đồ area giá trị danh mục. Không nội suy phiên trống (mục 8.11) — chỉ nối
  * các điểm thực có, và ghi rõ đang dựa trên bao nhiêu phiên.
  */
-export function PortfolioChart({ points, coverage }: Props) {
+export function PortfolioChart({ points, coverage, stale }: Props) {
   if (points.length === 0) {
     return (
       <div className="gf-ov-panel">
@@ -51,7 +54,8 @@ export function PortfolioChart({ points, coverage }: Props) {
     <div className="gf-ov-panel">
       <div className="gf-ov-chart-head">
         <div className="gf-ov-panel-title">Giá trị danh mục</div>
-        <div className="gf-ov-chart-meta gf-num">
+        <div className={`gf-ov-chart-meta gf-num${stale !== 'current' ? ' dim' : ''}`}>
+          {stale === 'stale' && '⚠ '}
           {coverage.points}/{coverage.trading_days} phiên có đủ giá
         </div>
       </div>

@@ -760,7 +760,7 @@ Tình trạng từng mục:
 | 1–6 | Giao dịch, Nhật ký, Checklist, Cài đặt | **Có** — verify 119 OK / 0 LỆCH |
 | 7 | Engine C — khớp lô đích danh | Chưa; quyết định đã chốt ở 7.9, đủ để cài |
 | 8 | Giá EOD, tiền mặt, ngành, cổ tức | **Có** — verify 81 OK / 0 LỆCH; còn 2 điểm mở ở 8.12 |
-| 9 | Hiển thị nguồn giá trên UI | Chưa; **đòi sửa 3 chỗ của mục 8 đã cài** — xem 9.6 |
+| 9 | Hiển thị nguồn giá trên UI | **Có** — verify 59 OK / 0 LỆCH |
 
 ---
 
@@ -1559,8 +1559,7 @@ dụng, giới hạn số lần gọi, độ phủ mã mình cần.
 
 ## 9. Hiển thị nguồn giá trên UI
 
-Trạng thái: **spec, chưa cài.** Mục 8 đã cài (81 OK / 0 LỆCH) nhưng **chưa** đáp
-ứng mục này — xem 9.6 để biết phải sửa gì.
+Trạng thái: **ĐÃ CÀI** — verify 59 OK / 0 LỆCH. Ba việc ở 9.6 đã làm xong.
 
 ### 9.1 Nguyên tắc
 
@@ -1640,26 +1639,30 @@ ngày lịch sẽ báo động sai.
 
 | Vị trí | Hiện trạng |
 |---|---|
-| Màn Tổng quan — bảng "Danh mục nắm giữ", cột Giá TT | có badge `nhập tay` nhưng **thiếu** `fetched_at` và cảnh báo cũ |
-| Màn Tổng quan — thẻ Tổng tài sản, Lãi/lỗ phiên gần nhất | **thiếu** dòng phụ ghi nguồn/phiên |
-| Màn Tổng quan — biểu đồ Giá trị danh mục | có `x/y phiên có đủ giá`, cần thêm cảnh báo khi điểm cuối `stale` |
+| Màn Tổng quan — cột Giá TT | **Xong** — dòng phụ `nguồn · phiên [· giờ]`, `⚠` khi cũ ≥3 phiên, `chưa có giá` khi thiếu |
+| Màn Tổng quan — thẻ Tổng tài sản, Lãi/lỗ phiên gần nhất | **Xong** — dòng phụ ghi nguồn/phiên, gộp thành `n nguồn` khi nhiều mã khác nguồn |
+| Màn Tổng quan — biểu đồ Giá trị danh mục | **Xong** — `series_stale`, hiện `⚠` khi điểm cuối cũ ≥3 phiên |
 | Màn Giao dịch — `remaining.unrealized_pl` của **engine C** | mục 7 chưa cài; khi cài phải theo mục này |
 | Màn Bảng giá, Phân tích | chưa cài; áp dụng ngay từ đầu |
 
-### 9.6 Mục 8 đã cài KHÔNG khớp mục này — ba việc phải sửa
+Frontend dùng `lib/price.ts`: `formatPriceWithSource()`, `formatSourceOnly()`,
+`sourceLabel()` (`auto:ssi` → `SSI`, `manual` → `thủ công`), `stalePrefix()`,
+`staleTooltip()`. Ánh xạ tên nguồn ở frontend, backend không hardcode.
 
-**(1) Tên trường `close` → `close_price`.** `GET fin/quotes` và
+### 9.6 Ba việc đã sửa so với mục 8
+
+**(1) Tên trường `close` → `close_price` — ĐÃ ĐỔI.** `GET fin/quotes` và
 `GET fin/quotes/history` hiện trả `close`
 (`class-fin-market.php` dòng ~228, ~284). Đổi tên thì phải sửa cả phía đọc:
 `frontend/src/api/overview.ts` và `screens/overview/*`. Đây là đổi phá vỡ hợp đồng,
 làm một lần dứt điểm, đừng để hai tên song song.
 
-**(2) Thiếu `fetched_at`, `is_manual`, `sessions_behind`, `staleness`.** Cột trong
+**(2) `fetched_at`, `is_manual`, `sessions_behind`, `staleness` — ĐÃ THÊM.** Cột trong
 DB là `updated_at` (bảng `fin_quote_history`), không phải `fetched_at`. **Không cần
 migrate**: API cứ trả `fetched_at` lấy giá trị từ cột `updated_at`. Với dòng
 `manual` thì `updated_at` chính là lúc người dùng nhập, nên nghĩa vẫn đúng.
 
-**(3) MỘT nguồn → CHUỖI nhiều nguồn.** Đây là thay đổi lớn nhất.
+**(3) MỘT nguồn → CHUỖI nhiều nguồn — ĐÃ LÀM.** Đây là thay đổi lớn nhất.
 
 Mục 8.11 hiện định nghĩa **một** nguồn duy nhất, cắm qua filter
 `gdsfin_quote_source`. Yêu cầu mục này nói tới **"cả 3 nguồn đều lỗi"**, tức cần
@@ -1682,12 +1685,17 @@ Với mỗi mã:
 Dòng source='manual' vẫn luôn thắng mọi nguồn tự động (luật cốt lõi 8.11).
 ```
 
-Nên có thêm endpoint chẩn đoán, vì "cả 3 nguồn cùng chết" là tình huống cần thấy
-được từ bên trong:
+Endpoint chẩn đoán, vì "cả 3 nguồn cùng chết" là tình huống cần thấy được từ bên
+trong:
 
 ```
-GET fin/quotes/health -> [{ source, last_ok_at, last_error_at, last_error, ok_rate_7d }]
+GET fin/quotes/health
+-> { sources_configured, order[], health: [{ source, configured, last_ok_at,
+     last_error_at, last_error, attempts_7d, ok_rate_7d }] }
 ```
+
+`ok_rate_7d` tính từ danh sách lần gọi trong 7 ngày, lưu ở option
+`gdsfin_quote_source_health` và tự tỉa các mục cũ hơn 7 ngày.
 
 ### 9.7 Điểm cần bạn quyết
 

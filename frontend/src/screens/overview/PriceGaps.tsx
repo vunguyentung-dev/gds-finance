@@ -48,7 +48,7 @@ export function PriceGaps({ gaps, drafts, saving, error, okMessage, onChange, on
                 hint
               ) : g.last_known ? (
                 <>
-                  Giá gần nhất đã biết: {toDong(Number(g.last_known.close))} ({formatDateVN(g.last_known.trade_date)})
+                  Giá gần nhất đã biết: {toDong(Number(g.last_known.close_price))} ({formatDateVN(g.last_known.trade_date)})
                 </>
               ) : (
                 'Chưa có giá nào cho mã này'
