@@ -753,9 +753,11 @@ POST fin/profile     body y hệt, lưu vào wp_usermeta
 - [ ] Bổ sung endpoint mới vào danh sách "Endpoint hiện có" trong `CLAUDE.md`
       (frontend bị chặn không được gọi endpoint ngoài danh sách đó)
 
-Mục **7 (engine C — khớp lô đích danh)** là phần bổ sung ĐỘC LẬP, chưa cài. Mục 1–6
-đã cài và verify 119 OK / 0 LỆCH. Ba quyết định thiết kế của mục 7 đã chốt ở **7.9**,
-spec đủ để cài.
+Mục **7 (engine C)** và mục **8 (giá thị trường, tiền mặt, ngành, cổ tức)** là hai
+phần bổ sung ĐỘC LẬP, chưa cài. Mục 1–6 đã cài và verify 119 OK / 0 LỆCH.
+Mục 7 đã chốt xong quyết định ở **7.9**, đủ để cài.
+Mục 8 còn 4 điểm cần chốt ở **8.10** — trong đó (a) nguồn giá là quyết định của
+người dùng vì có ràng buộc pháp lý và chi phí.
 
 ---
 
@@ -1035,3 +1037,293 @@ engine C — đây là chốt kiểm cho ranh giới ở mục 7.1.
 | c | `txn_date` cuối tuần | **Giữ nguyên, không chặn** | `2026-08-01` (thứ Bảy) vẫn nhập được, khớp hành vi prototype gốc |
 
 Không còn điểm treo. Spec mục 7 đã đủ để cài.
+
+---
+
+## 8. Nguồn dữ liệu còn thiếu — giá thị trường, tiền mặt, ngành, cổ tức
+
+Trạng thái: **spec, chưa cài.**
+
+Lý do có mục này: màn **Tổng quan** không dựng được vì 10/11 khối phụ thuộc dữ
+liệu chưa tồn tại. Trong prototype, 4 thẻ KPI là **số hard-code trong markup**
+(dòng 105/115/120: `2.847,5`, `420,0 tr`, `96,3 tr`), không tính từ state — nên
+không có công thức nào để port. Mục này mô tả bốn nguồn dữ liệu để mở đường.
+
+### 8.1 Bốn nguồn và các khối chúng mở
+
+| Nguồn | Mở được |
+|---|---|
+| **A. Giá thị trường** | Tổng tài sản · Lãi/lỗ hôm nay · biểu đồ Giá trị danh mục · cột Giá TT / Giá trị / Lãi lỗ % trong Danh mục nắm giữ · `unrealized_pl` của engine C (mục 7.6) · toàn bộ màn Bảng giá · biểu đồ màn Phân tích |
+| **B. Số dư tiền mặt** | Tiền mặt khả dụng · Tổng tài sản (một nửa còn lại) |
+| **C. Ngành + danh mục mã** | Phân bổ theo ngành · cột "Mã + tên" và tab VN30/HOSE/HNX của Bảng giá |
+| **D. Cổ tức** | Cổ tức dự kiến / năm · tiêu chí "Cổ tức đều" của Bộ lọc |
+
+**Vẫn chưa mở sau mục này:** dải "Gợi ý phát hiện cổ phiếu tốt" và màn Bộ lọc
+(cần chỉ số cơ bản P/E, ROE, tăng trưởng LN), 3 ô digest vĩ mô/tin tức và màn
+Tin tức (cần API vĩ mô + API tin). Hai nhóm đó nên tách spec riêng.
+
+### 8.2 Nguyên tắc: tách dữ liệu THAM CHIẾU khỏi dữ liệu người dùng
+
+| Loại | Bảng | `user_id`? | Ai ghi |
+|---|---|---|---|
+| Tham chiếu thị trường | `fin_symbols`, `fin_quotes`, `fin_quote_history`, `fin_dividends` | **KHÔNG** | cron / admin |
+| Dữ liệu người dùng | `fin_accounts`, `fin_transactions` (tiền mặt) | **CÓ** | chính user |
+
+Giá và ngành là dữ liệu **toàn thị trường**, giống `fin_market_holidays` ở mục 1 —
+nhân bản theo từng user là vừa tốn vừa dễ lệch. Endpoint đọc vẫn kiểm
+`fin_view`, nhưng dữ liệu là chung.
+
+> **Dùng lại bảng có sẵn cho tiền mặt.** `wp_fin_accounts` và
+> `wp_fin_transactions` **đã tồn tại từ `class-activator.php`** và đang rỗng —
+> đúng hình dạng một sổ tiền mặt (`account_id`, `direction in/out`, `amount`,
+> `fee`, `tax`, `status`). Không tạo bảng mới; chỉ cần endpoint. Endpoint
+> `/fin/v1/transactions` hiện có nhưng thiếu DELETE và thiếu quản lý account,
+> và **không nằm trong danh sách endpoint được phép** ở CLAUDE.md.
+
+### 8.3 SQL
+
+```sql
+-- ============ A+C: DANH MỤC MÃ (tham chiếu, dùng chung) ============
+CREATE TABLE {$p}fin_symbols (
+  sym        VARCHAR(12)  NOT NULL,
+  name       VARCHAR(150) NOT NULL,
+  exchange   VARCHAR(10)  NOT NULL,            -- HOSE | HNX | UPCOM
+  sector     VARCHAR(80)  NULL,
+  in_vn30    TINYINT(1)   NOT NULL DEFAULT 0,
+  is_active  TINYINT(1)   NOT NULL DEFAULT 1,
+  updated_at DATETIME     NOT NULL,
+  PRIMARY KEY (sym),
+  KEY idx_exchange (exchange, is_active),
+  KEY idx_sector (sector)
+) $charset;
+
+-- ============ A: GIÁ MỚI NHẤT (1 dòng/mã, ghi đè) ============
+CREATE TABLE {$p}fin_quotes (
+  sym        VARCHAR(12)   NOT NULL,
+  trade_date DATE          NOT NULL,           -- phiên của giá này
+  ref        DECIMAL(20,4) NULL,               -- tham chiếu (đồng/cp)
+  ceil_price DECIMAL(20,4) NULL,               -- trần
+  floor_price DECIMAL(20,4) NULL,              -- sàn
+  last       DECIMAL(20,4) NULL,               -- khớp
+  prev_close DECIMAL(20,4) NULL,               -- đóng cửa phiên trước
+  volume     BIGINT UNSIGNED NULL,
+  source     VARCHAR(40)   NOT NULL,           -- ghi rõ lấy từ đâu
+  fetched_at DATETIME      NOT NULL,
+  PRIMARY KEY (sym),
+  KEY idx_fetched (fetched_at)
+) $charset;
+
+-- ============ A: LỊCH SỬ GIÁ ĐÓNG CỬA (cho biểu đồ + sparkline) ============
+CREATE TABLE {$p}fin_quote_history (
+  sym        VARCHAR(12)   NOT NULL,
+  trade_date DATE          NOT NULL,
+  close      DECIMAL(20,4) NOT NULL,
+  volume     BIGINT UNSIGNED NULL,
+  PRIMARY KEY (sym, trade_date)
+) $charset;
+
+-- ============ D: CỔ TỨC CÔNG BỐ (tham chiếu) ============
+CREATE TABLE {$p}fin_dividends (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  sym        VARCHAR(12)   NOT NULL,
+  ex_date    DATE          NOT NULL,           -- ngày GDKHQ
+  pay_date   DATE          NULL,
+  kind       VARCHAR(10)   NOT NULL,           -- 'cash' | 'stock'
+  cash_per_share DECIMAL(20,4) NULL,           -- ĐỒNG/cp, khi kind='cash'
+  stock_ratio    DECIMAL(10,6) NULL,           -- vd 0.10 = 10%, khi kind='stock'
+  note       VARCHAR(255)  NULL,
+  source     VARCHAR(40)   NOT NULL,
+  created_at DATETIME      NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_sym_ex_kind (sym, ex_date, kind),
+  KEY idx_sym_ex (sym, ex_date)
+) $charset;
+```
+
+`fin_accounts` và `fin_transactions`: **không tạo mới**, dùng nguyên bảng đã có.
+Chỉ cần thêm một chỉ mục nếu thấy chậm: `KEY idx_user_status (user_id, status)`.
+
+### 8.4 Giá thị trường — hợp đồng "có thể không có dữ liệu"
+
+Đây là điểm quan trọng nhất của mục này. Giá đến từ nguồn ngoài nên **luôn có khả
+năng thiếu hoặc cũ**. Áp dụng đúng nguyên tắc đã chốt ở mục 7.9(b): **trả `null`,
+không bịa số**.
+
+#### `GET fin/quotes?syms=FPT,KDH`
+
+```json
+{
+  "as_of": "2026-08-01 14:45:00",
+  "source": "<tên nguồn>",
+  "is_stale": false,
+  "stale_reason": null,
+  "quotes": {
+    "KDH": { "trade_date":"2026-08-01", "last":"19100.0000", "prev_close":"18950.0000",
+             "ref":"18950.0000", "ceil_price":"20280.0000", "floor_price":"17620.0000",
+             "change":"150.0000", "change_pct":"0.79", "volume":"3120000" },
+    "FPT": null
+  }
+}
+```
+
+**Quy tắc bắt buộc:**
+
+- Mã không có giá → giá trị `null`, **không** thay bằng giá vốn. Prototype lách
+  bằng `mkt = mktLookup[sym] || avg` (dòng 1162) — tức lấy **giá vốn làm giá thị
+  trường**, khiến cột "Giá TT" hiển thị giá vốn và lãi/lỗ luôn ra `0%`. **Không
+  làm theo.** Đó là số sai trông như số thật.
+- `is_stale = true` khi `fetched_at` cũ hơn ngưỡng (xem 8.10 điểm c), kèm
+  `stale_reason` để UI hiện được lý do, ví dụ `"nguồn giá không phản hồi từ 13:20"`.
+- Không có bản ghi nào → HTTP **200** với `quotes` toàn `null`, **không phải 404**.
+  Thiếu giá là trạng thái bình thường, không phải lỗi.
+
+#### `GET fin/quotes/history?sym=KDH&from=2026-05-01&to=2026-08-01`
+
+```json
+{ "sym":"KDH", "points":[ {"trade_date":"2026-05-02","close":"23100.0000"} ] }
+```
+
+#### `POST fin/quotes/refresh` — chỉ `fin_manage`, hoặc gọi từ WP-Cron
+
+```json
+{ "updated": 42, "failed": ["ABC"], "as_of":"2026-08-01 14:45:00" }
+```
+
+Nạp giá nên chạy bằng **WP-Cron**, không nạp đồng bộ trong request của người dùng —
+nguồn ngoài chậm hoặc treo sẽ làm cả màn treo theo. Endpoint này để chạy tay khi cần.
+
+### 8.5 Số dư tiền mặt — lưu phát sinh, TÍNH số dư lúc đọc
+
+```
+GET    fin/accounts                  -> [{id, name, acc_type, currency, opening_bal, is_active}]
+POST   fin/accounts                  body {name, acc_type, currency, opening_bal}
+GET    fin/cash-movements[?account_id=&from=&to=]
+POST   fin/cash-movements            body {account_id, txn_date, direction:'in'|'out', amount, note}
+DELETE fin/cash-movements/{id}       -> {voided:1}   (status='void', không xoá cứng)
+GET    fin/cash-summary              -> số dư đã tính
+```
+
+`GET fin/cash-summary`:
+
+```json
+{
+  "opening_total": "500000000.0000",
+  "deposits": "200000000.0000",
+  "withdrawals": "50000000.0000",
+  "stock_net_buy": "647970500.0000",
+  "stock_net_sell": "209574750.0000",
+  "balance": "211604250.0000",
+  "as_of": "2026-08-01 14:45:00"
+}
+```
+
+```
+balance = opening_total + deposits − withdrawals − stock_net_buy + stock_net_sell
+```
+
+**Chỉ lưu nạp/rút, KHÔNG lưu tác động của lệnh cổ phiếu.** Phần cổ phiếu tính lúc
+đọc từ `fin_stock_txns` (`total_net_buy` / `total_net_sell` đã có ở
+`fin/stock-summary`). Cùng lý do như "không lưu `cost_matched`" ở mục 7.2: nếu
+sinh thêm dòng tiền mặt cho mỗi lệnh thì void một lệnh phải void đúng dòng tiền
+tương ứng, và sửa biểu phí sẽ làm số cũ đóng băng lệch khỏi engine A/B.
+
+> **KHÔNG cộng `fin_personal` (thu/chi cá nhân) vào số dư tiền mặt chứng khoán.**
+> Đó là chi tiêu đời sống, không phải tiền trong tài khoản chứng khoán. Gộp vào sẽ
+> ra một con số không có nghĩa thực tế nào. Hai sổ để riêng.
+
+### 8.6 Ngành và danh mục mã
+
+```
+GET fin/symbols[?exchange=HOSE&vn30=1&q=fp]  -> [{sym, name, exchange, sector, in_vn30}]
+```
+
+Dùng cho: cột "Mã + tên" và tab VN30/HOSE/HNX của Bảng giá, và ánh xạ mã → ngành
+để tính Phân bổ theo ngành. Mã đang nắm mà **không có** trong `fin_symbols` thì
+gom vào nhóm `"Chưa phân loại"`, không bỏ khỏi biểu đồ — bỏ đi sẽ làm tổng tỉ
+trọng không đủ 100% mà không ai biết vì sao.
+
+### 8.7 Cổ tức
+
+```
+GET fin/dividends?syms=KDH,FPT[&year=2026]  -> [{sym, ex_date, pay_date, kind, cash_per_share, stock_ratio}]
+```
+
+"Cổ tức dự kiến / năm" của màn Tổng quan:
+
+```
+dividend_year = Σ (KL đang nắm của mã) × (Σ cash_per_share công bố có ex_date trong năm hiện tại)
+```
+
+> **Đừng lẫn với cổ tức ĐÃ NHẬN.** Cổ tức đã nhận hiện được người dùng ghi ở màn
+> Tài chính cá nhân với `cat='Cổ tức'` trong `fin_personal`. Hai con số khác nhau:
+> một là **dự kiến theo công bố**, một là **thực nhận**. Nếu báo cáo nào cộng cả
+> hai thì sẽ đếm trùng.
+
+### 8.8 `GET fin/overview` — endpoint gộp cho màn Tổng quan
+
+Theo quyết định "tính toán ở backend, client không tự tính", màn Tổng quan nên gọi
+**một** endpoint:
+
+```json
+{
+  "as_of": "2026-08-01 14:45:00",
+  "price_coverage": { "held": 1, "priced": 1, "missing": [] },
+  "cards": {
+    "total_asset":     { "value": "574504250.0000", "available": true,  "reason": null },
+    "today_pl":        { "value": "2850000.0000",   "available": true,  "reason": null },
+    "today_pl_pct":    { "value": "0.50",           "available": true,  "reason": null },
+    "cash_available":  { "value": "211604250.0000", "available": true,  "reason": null },
+    "dividend_year":   { "value": null,             "available": false, "reason": "chưa có dữ liệu cổ tức cho mã đang nắm" }
+  },
+  "holdings": [
+    { "sym":"KDH", "name":"Khang Điền", "sector":"Bất động sản",
+      "qty":"19000", "avg_cost":"21599.0167", "cost_value":"410381316.6667",
+      "last":"19100.0000", "market_value":"362900000.0000",
+      "unrealized_pl":"-47481316.6667", "unrealized_pct":"-11.57",
+      "priced": true, "spark": ["23100.0000","22400.0000","19100.0000"] }
+  ],
+  "sector_alloc": [ { "sector":"Bất động sản", "value":"362900000.0000", "pct":"63.17" } ],
+  "portfolio_series": [ { "trade_date":"2026-07-25", "value":"401000000.0000" } ]
+}
+```
+
+**Mọi thẻ dùng dạng `{value, available, reason}`** thay vì chỉ một con số. Khi
+thiếu dữ liệu, UI có `reason` để hiện đúng lý do chứ không hiện `0` — `0` và
+"không biết" là hai chuyện khác nhau, và với số tiền thì lẫn hai thứ đó là nguy hiểm.
+
+`price_coverage` cho UI biết đang thiếu giá bao nhiêu mã, để hiện cảnh báo ở đầu
+màn thay vì để người dùng tự đoán vì sao tổng tài sản trông thấp.
+
+`portfolio_series` dựng từ `fin_quote_history` × KL nắm giữ **tại từng ngày** (suy
+từ `fin_stock_txns`), không phải KL hiện tại × giá cũ — dùng KL hiện tại sẽ vẽ ra
+một đường lịch sử sai.
+
+### 8.9 Việc cần làm khi cài mục 8
+
+- [ ] 4 bảng tham chiếu ở 8.3; **không** tạo mới `fin_accounts`/`fin_transactions`
+- [ ] Nạp giá bằng WP-Cron, không nạp đồng bộ trong request người dùng
+- [ ] Thiếu giá trả `null` + `is_stale`/`reason`; **không** dùng giá vốn thay giá TT
+- [ ] `balance` tính lúc đọc, chỉ lưu nạp/rút
+- [ ] Không cộng `fin_personal` vào tiền mặt chứng khoán
+- [ ] Mã ngoài `fin_symbols` gom vào "Chưa phân loại", không loại khỏi biểu đồ
+- [ ] `portfolio_series` dùng KL **tại từng ngày**, không dùng KL hiện tại
+- [ ] Bổ sung endpoint mới vào danh sách trong `CLAUDE.md`
+
+### 8.10 Điểm cần bạn quyết trước khi cài
+
+**(a) Nguồn giá.** Chưa chọn. Đây là quyết định có ràng buộc pháp lý (điều khoản
+sử dụng của nhà cung cấp) và ràng buộc kỹ thuật (giới hạn số lần gọi, độ tin cậy)
+mà tôi không nên tự chọn thay bạn. Ba hướng: nhập tay giá cuối phiên cho các mã
+đang nắm (ít mã thì khả thi, không phụ thuộc ai), dùng API công khai của một công
+ty chứng khoán, hoặc dịch vụ dữ liệu có phí.
+
+**(b) Tần suất cập nhật.** README nói digest vĩ mô/tin cập nhật 2 phiên/ngày
+(08:30 và 14:00). Giá thì cần realtime, hay cuối phiên là đủ? Ảnh hưởng trực tiếp
+tới ý nghĩa của "Lãi/lỗ hôm nay".
+
+**(c) Ngưỡng `is_stale`.** Bao lâu thì coi là cũ? Gợi ý: quá 15 phút trong giờ
+giao dịch, hoặc `trade_date` không phải phiên gần nhất.
+
+**(d) Tài khoản tiền.** Một tài khoản chứng khoán duy nhất, hay nhiều tài khoản
+(`fin_accounts` cho phép nhiều)? Nhiều tài khoản thì mọi số tổng phải nói rõ đang
+gộp những tài khoản nào.
