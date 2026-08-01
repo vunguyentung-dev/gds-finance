@@ -165,6 +165,14 @@ class GDSFIN_Stock {
         return $r;
     }
 
+    /**
+     * Mốc phí đang hiệu lực tại ngày $d (mặc định hôm nay). CHỈ ĐỌC —
+     * thêm cho mục 8 dùng, không thay đổi bất kỳ phép tính nào của engine A/B.
+     */
+    public static function rate_at(int $uid, ?string $d = null): array {
+        return self::rate_for(self::load_rates($uid), $d ?: current_time('Y-m-d'));
+    }
+
     public static function list_rates(WP_REST_Request $req) {
         $rows = self::load_rates(get_current_user_id());
         return rest_ensure_response(array_map(fn($r) => [

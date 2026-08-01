@@ -7,8 +7,8 @@
  */
 defined('ABSPATH') || exit;
 
-define('GDSFIN_VERSION', '1.2.0');
-define('GDSFIN_DB_VERSION', '1.2.0');
+define('GDSFIN_VERSION', '1.3.0');
+define('GDSFIN_DB_VERSION', '1.3.0');
 define('GDSFIN_PATH', plugin_dir_path(__FILE__));
 define('GDSFIN_URL', plugin_dir_url(__FILE__));
 
@@ -20,6 +20,9 @@ require_once GDSFIN_PATH . 'includes/class-fin-stock.php';
 require_once GDSFIN_PATH . 'includes/class-fin-journal.php';
 require_once GDSFIN_PATH . 'includes/class-fin-checklist.php';
 require_once GDSFIN_PATH . 'includes/class-fin-profile.php';
+require_once GDSFIN_PATH . 'includes/class-fin-market.php';
+require_once GDSFIN_PATH . 'includes/class-fin-cash.php';
+require_once GDSFIN_PATH . 'includes/class-fin-overview.php';
 
 register_activation_hook(__FILE__, ['GDSFIN_Activator', 'activate']);
 
@@ -30,6 +33,8 @@ add_action('plugins_loaded', function () {
         GDSFIN_Stock::create_tables();
         GDSFIN_Journal::create_tables();
         GDSFIN_Checklist::create_tables();
+        GDSFIN_Market::create_tables();
+        GDSFIN_Market::schedule_cron();
         update_option('gdsfin_db_version', GDSFIN_DB_VERSION);
     }
 });
@@ -40,6 +45,12 @@ add_action('rest_api_init', ['GDSFIN_Stock', 'register_routes']);
 add_action('rest_api_init', ['GDSFIN_Journal', 'register_routes']);
 add_action('rest_api_init', ['GDSFIN_Checklist', 'register_routes']);
 add_action('rest_api_init', ['GDSFIN_Profile', 'register_routes']);
+add_action('rest_api_init', ['GDSFIN_Market', 'register_routes']);
+add_action('rest_api_init', ['GDSFIN_Cash', 'register_routes']);
+add_action('rest_api_init', ['GDSFIN_Overview', 'register_routes']);
+
+// Cron nạp giá cuối ngày — xem cảnh báo về WP-Cron ở docs/api-spec.md mục 8.11
+add_action(GDSFIN_Market::CRON_HOOK, ['GDSFIN_Market', 'run_cron']);
 
 add_shortcode('gds_finance_app', function () {
     $dist = GDSFIN_PATH . 'assets/dist/app.js';
