@@ -125,3 +125,11 @@ Gap chính 14-16px, padding thẻ 18px.
 - KHÔNG chèn/sửa/xóa dữ liệu trong database ngoài dữ liệu test do chính mình tạo và dọn ngay
 - KHÔNG thay đổi cấu hình WordPress (template trang, settings, plugin khác)
 - Cần làm những việc trên: MÔ TẢ cho người dùng tự thực hiện
+
+## Nới phạm vi tạm thời — chỉ để cài mục 8 của api-spec
+Được sửa backend/ CHỈ để cài mục 8 (giá EOD, tiền mặt, ngành, cổ tức),
+trên nhánh riêng. Cài mục 8 TRƯỚC mục 7.
+Bắt buộc: verify bằng dữ liệu thật đang có trong DB, in bảng đối chiếu
+"kỳ vọng vs thực tế". Không báo hoàn thành nếu còn dòng lệch.
+KHÔNG đụng class-fin-personal.php, endpoint fin/entries, và engine A/B
+đã verify 119 OK — nếu số nào của chúng đổi thì đó là lỗi.
