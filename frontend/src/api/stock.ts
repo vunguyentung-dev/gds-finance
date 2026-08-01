@@ -96,6 +96,18 @@ export function getRates() {
   return apiClient.get<RateTier[]>('fin/rates');
 }
 
+export interface UpsertRatePayload {
+  eff_date: string;
+  /** Phần trăm, vd '0.15'. */
+  buy_fee: string;
+  sell_fee: string;
+  tax: string;
+}
+
+export function upsertRate(payload: UpsertRatePayload) {
+  return apiClient.post<{ id: string; upserted: 'insert' | 'update' }>('fin/rates', payload);
+}
+
 export function createStockTxn(payload: CreateTxnPayload) {
   return apiClient.post<{ id: string }>('fin/stock-txns', payload);
 }
