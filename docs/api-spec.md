@@ -1321,7 +1321,7 @@ một đường lịch sử sai.
       `fin_quotes` — `last`/`prev_close` suy từ `fin_quote_history` (8.11)
 - [ ] Mọi mốc thời gian dùng `GDSFIN_Util::now_mysql()/today()/year()/tz()`, **không**
       dùng `current_time()`/`wp_timezone()` — neo cứng GMT+7, không phụ thuộc setting
-      site (8.11). Ngoại lệ đã biết: `class-fin-personal.php` bị cấm sửa
+      site (8.11). Đã dọn hết, không còn ngoại lệ; `grep` để chắc
 - [ ] Cron lấy giá EOD **15:05 giờ VN**, chỉ mã đang nắm; nguồn lỗi thì ghi log,
       **không** ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
 - [ ] Cron **không ghi đè** dòng `source='manual'` — luật cốt lõi ở 8.11
@@ -1445,12 +1445,17 @@ Frontend cũng neo giờ VN: `todayIso()` trong `lib/format.ts` dùng
 > Nếu vẫn muốn đổi setting cho WordPress core (dấu thời gian bài viết, log) thì cứ
 > đổi — hai bên sẽ trùng nhau, không gây lệch kép.
 
-> **NGOẠI LỆ CÒN LẠI: `class-fin-personal.php`.** File này bị CLAUDE.md cấm sửa nên
-> còn 3 chỗ dùng `current_time()`: mặc định `entry_date` (dòng 107), `created_at`
-> (dòng 116), và năm mặc định của `summary()` khi chưa có dữ liệu (dòng 147). Tác
-> động thực tế nhỏ — UI luôn gửi `entry_date`, `created_at` chỉ là metadata — nhưng
-> đây là chỗ duy nhất trong app còn đóng dấu theo giờ site. Muốn dọn hết thì cần bỏ
-> ràng buộc "không đụng class-fin-personal.php".
+> **Không còn ngoại lệ nào.** Toàn bộ backend đã dùng `GDSFIN_Util`, kể cả
+> `class-fin-personal.php` (mặc định `entry_date`, `created_at`, năm mặc định của
+> `summary()`) và `class-rest.php` (endpoint `/transactions` cũ). Kiểm bằng:
+>
+> ```
+> grep -rn "current_time\|wp_timezone" backend/includes/*.php backend/gds-finance.php
+> # chỉ còn trong comment
+> ```
+>
+> `class-rest.php` quan trọng vì nó ghi vào **cùng bảng** `wp_fin_transactions` mà
+> module tiền mặt dùng — để lệch múi giờ thì một bảng có hai chuẩn thời gian.
 
 #### Cron
 

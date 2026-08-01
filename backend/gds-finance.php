@@ -14,8 +14,10 @@ define('GDSFIN_URL', plugin_dir_url(__FILE__));
 
 require_once GDSFIN_PATH . 'includes/class-activator.php';
 require_once GDSFIN_PATH . 'includes/class-rest.php';
-require_once GDSFIN_PATH . 'includes/class-fin-personal.php';
+// Nạp util TRƯỚC các module nghiệp vụ: mọi module đều dùng GDSFIN_Util (múi giờ,
+// bcmath, định dạng), nên để nó lên đầu cho đúng thứ tự phụ thuộc.
 require_once GDSFIN_PATH . 'includes/class-fin-util.php';
+require_once GDSFIN_PATH . 'includes/class-fin-personal.php';
 require_once GDSFIN_PATH . 'includes/class-fin-stock.php';
 require_once GDSFIN_PATH . 'includes/class-fin-journal.php';
 require_once GDSFIN_PATH . 'includes/class-fin-checklist.php';

@@ -104,7 +104,7 @@ class GDSFIN_Personal {
         if ($amount <= 0) {
             return new WP_Error('bad_amount', 'Số tiền phải lớn hơn 0', ['status' => 400]);
         }
-        $date = sanitize_text_field($b['entry_date'] ?? current_time('Y-m-d'));
+        $date = sanitize_text_field($b['entry_date'] ?? GDSFIN_Util::today());
 
         $wpdb->insert(self::table(), [
             'user_id'    => $uid,
@@ -113,7 +113,7 @@ class GDSFIN_Personal {
             'cat'        => $cat,
             'note'       => sanitize_text_field($b['note'] ?? ''),
             'entry_date' => $date,
-            'created_at' => current_time('mysql'),
+            'created_at' => GDSFIN_Util::now_mysql(),
         ]);
         return rest_ensure_response(['id' => $wpdb->insert_id]);
     }
@@ -144,7 +144,7 @@ class GDSFIN_Personal {
         $years = [];
         foreach ($rows as $r) { $years[(int)$r['y']] = true; }
         krsort($years);
-        $curYear = $year ? (int)$year : (array_key_first($years) ?: (int)current_time('Y'));
+        $curYear = $year ? (int)$year : (array_key_first($years) ?: GDSFIN_Util::year());
 
         $monthly = array_fill(1, 12, ['in' => 0.0, 'out' => 0.0]);
         $catTotals = [];
