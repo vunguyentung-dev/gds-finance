@@ -4,6 +4,7 @@ import { getProfile, saveProfile, type Profile } from '../../api/settings';
 import { getRates, upsertRate, type RateTier } from '../../api/stock';
 import { formatDateVN, formatVN, parseVNNumber, todayIso } from '../../lib/format';
 import '../../styles/settings.css';
+import { NewsFeedCard } from './NewsFeedCard';
 
 type ScreenState = 'loading' | 'ready' | 'error' | 'forbidden';
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
@@ -342,6 +343,8 @@ export function SettingsScreen() {
           </tbody>
         </table>
       </div>
+
+      <NewsFeedCard />
 
       <div className="gf-set-card gf-set-about">
         <div className="gf-set-logo">FM</div>
