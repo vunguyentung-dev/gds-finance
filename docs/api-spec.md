@@ -1053,7 +1053,7 @@ không có công thức nào để port. Mục này mô tả bốn nguồn dữ 
 
 | Nguồn | Mở được |
 |---|---|
-| **A. Giá thị trường** | Tổng tài sản · Lãi/lỗ hôm nay · biểu đồ Giá trị danh mục · cột Giá TT / Giá trị / Lãi lỗ % trong Danh mục nắm giữ · `unrealized_pl` của engine C (mục 7.6) · toàn bộ màn Bảng giá · biểu đồ màn Phân tích |
+| **A. Giá thị trường** | Tổng tài sản · Lãi/lỗ phiên gần nhất · biểu đồ Giá trị danh mục · cột Giá TT / Giá trị / Lãi lỗ % trong Danh mục nắm giữ · `unrealized_pl` của engine C (mục 7.6) · toàn bộ màn Bảng giá · biểu đồ màn Phân tích |
 | **B. Số dư tiền mặt** | Tiền mặt khả dụng · Tổng tài sản (một nửa còn lại) |
 | **C. Ngành + danh mục mã** | Phân bổ theo ngành · cột "Mã + tên" và tab VN30/HOSE/HNX của Bảng giá |
 | **D. Cổ tức** | Cổ tức dự kiến / năm · tiêu chí "Cổ tức đều" của Bộ lọc |
@@ -1066,7 +1066,7 @@ Tin tức (cần API vĩ mô + API tin). Hai nhóm đó nên tách spec riêng.
 
 | Loại | Bảng | `user_id`? | Ai ghi |
 |---|---|---|---|
-| Tham chiếu thị trường | `fin_symbols`, `fin_quotes`, `fin_quote_history`, `fin_dividends` | **KHÔNG** | cron / admin |
+| Tham chiếu thị trường | `fin_symbols`, `fin_quote_history`, `fin_dividends` | **KHÔNG** | cron; nhập tay để bù (8.11) |
 | Dữ liệu người dùng | `fin_accounts`, `fin_transactions` (tiền mặt) | **CÓ** | chính user |
 
 Giá và ngành là dữ liệu **toàn thị trường**, giống `fin_market_holidays` ở mục 1 —
@@ -1097,29 +1097,18 @@ CREATE TABLE {$p}fin_symbols (
   KEY idx_sector (sector)
 ) $charset;
 
--- ============ A: GIÁ MỚI NHẤT (1 dòng/mã, ghi đè) ============
-CREATE TABLE {$p}fin_quotes (
-  sym        VARCHAR(12)   NOT NULL,
-  trade_date DATE          NOT NULL,           -- phiên của giá này
-  ref        DECIMAL(20,4) NULL,               -- tham chiếu (đồng/cp)
-  ceil_price DECIMAL(20,4) NULL,               -- trần
-  floor_price DECIMAL(20,4) NULL,              -- sàn
-  last       DECIMAL(20,4) NULL,               -- khớp
-  prev_close DECIMAL(20,4) NULL,               -- đóng cửa phiên trước
-  volume     BIGINT UNSIGNED NULL,
-  source     VARCHAR(40)   NOT NULL,           -- ghi rõ lấy từ đâu
-  fetched_at DATETIME      NOT NULL,
-  PRIMARY KEY (sym),
-  KEY idx_fetched (fetched_at)
-) $charset;
-
--- ============ A: LỊCH SỬ GIÁ ĐÓNG CỬA (cho biểu đồ + sparkline) ============
+-- ============ A: GIÁ ĐÓNG CỬA THEO PHIÊN (nguồn sự thật duy nhất về giá) ============
 CREATE TABLE {$p}fin_quote_history (
   sym        VARCHAR(12)   NOT NULL,
   trade_date DATE          NOT NULL,
-  close      DECIMAL(20,4) NOT NULL,
+  close      DECIMAL(20,4) NOT NULL,           -- ĐỒNG/cp
   volume     BIGINT UNSIGNED NULL,
-  PRIMARY KEY (sym, trade_date)
+  source     VARCHAR(40)   NOT NULL,           -- 'auto:<nhà cung cấp>' | 'manual'
+  entered_by BIGINT UNSIGNED NULL,             -- user_id khi source='manual'
+  updated_at DATETIME      NOT NULL,
+  PRIMARY KEY (sym, trade_date),
+  KEY idx_sym_date (sym, trade_date),
+  KEY idx_source (source)
 ) $charset;
 
 -- ============ D: CỔ TỨC CÔNG BỐ (tham chiếu) ============
@@ -1270,22 +1259,46 @@ Theo quyết định "tính toán ở backend, client không tự tính", màn T
   "price_coverage": { "held": 1, "priced": 1, "missing": [] },
   "cards": {
     "total_asset":     { "value": "574504250.0000", "available": true,  "reason": null },
-    "today_pl":        { "value": "2850000.0000",   "available": true,  "reason": null },
-    "today_pl_pct":    { "value": "0.50",           "available": true,  "reason": null },
+    "last_session_pl":     { "value": "2850000.0000", "available": true, "reason": null },
+    "last_session_pl_pct": { "value": "0.79",        "available": true, "reason": null },
     "cash_available":  { "value": "211604250.0000", "available": true,  "reason": null },
     "dividend_year":   { "value": null,             "available": false, "reason": "chưa có dữ liệu cổ tức cho mã đang nắm" }
   },
   "holdings": [
     { "sym":"KDH", "name":"Khang Điền", "sector":"Bất động sản",
       "qty":"19000", "avg_cost":"21599.0167", "cost_value":"410381316.6667",
-      "last":"19100.0000", "market_value":"362900000.0000",
-      "unrealized_pl":"-47481316.6667", "unrealized_pct":"-11.57",
+      "last":"19100.0000", "trade_date":"2026-08-01",
+      "market_value":"362900000.0000",
+      "exit_fee_est":"907250.0000",
+      "unrealized_pl":"-48388566.6667", "unrealized_pct":"-11.79",
       "priced": true, "spark": ["23100.0000","22400.0000","19100.0000"] }
   ],
   "sector_alloc": [ { "sector":"Bất động sản", "value":"362900000.0000", "pct":"63.17" } ],
   "portfolio_series": [ { "trade_date":"2026-07-25", "value":"401000000.0000" } ]
 }
 ```
+
+Ba trường tiền của mỗi dòng `holdings` phải **cộng khớp nhau**, đừng gộp lại thành
+một số:
+
+```
+market_value  = qty × last                       (giá trị theo giá thị trường, CHƯA trừ phí)
+exit_fee_est  = market_value × (sellFee + tax)   (phí+thuế nếu bán ngay bây giờ)
+unrealized_pl = market_value − exit_fee_est − cost_value
+```
+
+Ví dụ KDH ở trên: `19.000 × 19.100 = 362.900.000` · phí bán ước tính
+`362.900.000 × 0,25% = 907.250` · `362.900.000 − 907.250 − 410.381.316,6667 =
+−48.388.566,6667` (−11,79%).
+
+> **Đây là chỗ spec từng tự mâu thuẫn.** Bản trước ghi `unrealized_pl` ở 8.8 là
+> `−47.481.316,6667` (không trừ phí bán) trong khi công thức ở **7.6** có trừ —
+> lệch đúng `907.250`. Đã sửa theo 7.6: **trừ phí bán ước tính**, để so được cùng
+> cơ sở với lãi/lỗ đã thực hiện (vốn đã gồm phí mua và trừ phí bán).
+>
+> Ngược lại, **`total_asset` dùng `market_value` CHƯA trừ phí** — chưa bán thì
+> chưa mất phí. Hai con số phục vụ hai mục đích khác nhau, và spec nói rõ để không
+> ai "sửa cho nhất quán" rồi làm sai một trong hai.
 
 **Mọi thẻ dùng dạng `{value, available, reason}`** thay vì chỉ một con số. Khi
 thiếu dữ liệu, UI có `reason` để hiện đúng lý do chứ không hiện `0` — `0` và
@@ -1300,30 +1313,165 @@ một đường lịch sử sai.
 
 ### 8.9 Việc cần làm khi cài mục 8
 
-- [ ] 4 bảng tham chiếu ở 8.3; **không** tạo mới `fin_accounts`/`fin_transactions`
-- [ ] Nạp giá bằng WP-Cron, không nạp đồng bộ trong request người dùng
+- [ ] 3 bảng tham chiếu ở 8.3 (`fin_symbols`, `fin_quote_history`, `fin_dividends`);
+      **không** tạo mới `fin_accounts`/`fin_transactions`, cũng **không** tạo
+      `fin_quotes` — `last`/`prev_close` suy từ `fin_quote_history` (8.11)
+- [ ] Cron lấy giá EOD sau 15:30, chỉ mã đang nắm; nguồn lỗi thì ghi log, **không**
+      ghi giá rác. Đặt cron hệ thống thật, đừng dựa vào WP-Cron theo traffic (8.11)
+- [ ] Cron **không ghi đè** dòng `source='manual'` — luật cốt lõi ở 8.11
 - [ ] Thiếu giá trả `null` + `is_stale`/`reason`; **không** dùng giá vốn thay giá TT
+- [ ] `unrealized_pl` trừ phí bán ước tính, `total_asset` thì **không** trừ (8.8)
+- [ ] Đổi tên thẻ KPI thành "Lãi/lỗ phiên gần nhất", không dùng "Lãi/lỗ hôm nay" (8.10b)
+- [ ] Không nội suy giá cho phiên trống; trả kèm `spark_from`/`spark_to` và
+      `series_coverage` (8.11)
 - [ ] `balance` tính lúc đọc, chỉ lưu nạp/rút
 - [ ] Không cộng `fin_personal` vào tiền mặt chứng khoán
 - [ ] Mã ngoài `fin_symbols` gom vào "Chưa phân loại", không loại khỏi biểu đồ
 - [ ] `portfolio_series` dùng KL **tại từng ngày**, không dùng KL hiện tại
 - [ ] Bổ sung endpoint mới vào danh sách trong `CLAUDE.md`
 
-### 8.10 Điểm cần bạn quyết trước khi cài
+### 8.10 Quyết định đã chốt về nguồn giá
 
-**(a) Nguồn giá.** Chưa chọn. Đây là quyết định có ràng buộc pháp lý (điều khoản
-sử dụng của nhà cung cấp) và ràng buộc kỹ thuật (giới hạn số lần gọi, độ tin cậy)
-mà tôi không nên tự chọn thay bạn. Ba hướng: nhập tay giá cuối phiên cho các mã
-đang nắm (ít mã thì khả thi, không phụ thuộc ai), dùng API công khai của một công
-ty chứng khoán, hoặc dịch vụ dữ liệu có phí.
+| # | Vấn đề | Quyết định |
+|---|---|---|
+| a | Cách lấy giá | **Tự động lấy giá đóng cửa cuối ngày, nhập tay để bù khi thiếu** — chi tiết ở 8.11. Nhà cung cấp cụ thể **chưa chọn**; 8.11 mô tả hợp đồng adapter nên không phải chờ điều đó mới cài được phần còn lại |
+| b | Tần suất | **Cuối ngày (EOD)**, không realtime |
+| c | Ngưỡng `is_stale` | **Theo phiên, không theo đồng hồ**: cũ khi phiên giao dịch gần nhất > `MAX(trade_date)` đang có. Không cần ngưỡng phút |
+| d | Một hay nhiều tài khoản tiền | **Còn mở** — xem 8.12 |
 
-**(b) Tần suất cập nhật.** README nói digest vĩ mô/tin cập nhật 2 phiên/ngày
-(08:30 và 14:00). Giá thì cần realtime, hay cuối phiên là đủ? Ảnh hưởng trực tiếp
-tới ý nghĩa của "Lãi/lỗ hôm nay".
+Hai hệ quả trực tiếp của (b), phải chấp nhận:
 
-**(c) Ngưỡng `is_stale`.** Bao lâu thì coi là cũ? Gợi ý: quá 15 phút trong giờ
-giao dịch, hoặc `trade_date` không phải phiên gần nhất.
+- **Không có "Lãi/lỗ hôm nay" theo nghĩa trong phiên.** Dữ liệu EOD chỉ cho
+  `qty × (close phiên gần nhất − close phiên trước)`. Thẻ KPI đổi tên thành
+  **"Lãi/lỗ phiên gần nhất"**; giữ tên cũ là nói sai điều mình đang hiển thị.
+- **Màn Bảng giá vẫn chưa mở được như thiết kế.** Trần / Sàn / TC / KL là số trong
+  phiên, dữ liệu EOD không có. Dựng được nhiều nhất là bảng "giá đóng cửa các mã
+  của tôi", không phải bảng giá thị trường 4 tab VN30/HOSE/HNX/Tất cả.
 
-**(d) Tài khoản tiền.** Một tài khoản chứng khoán duy nhất, hay nhiều tài khoản
-(`fin_accounts` cho phép nhiều)? Nhiều tài khoản thì mọi số tổng phải nói rõ đang
-gộp những tài khoản nào.
+### 8.11 Cơ chế giá: tự động cuối ngày + nhập tay bù
+
+`fin_quote_history` là **nguồn sự thật duy nhất** về giá. Không có bảng "giá mới
+nhất" riêng: `last` = `close` của `MAX(trade_date)`, `prev_close` = close của phiên
+liền trước. Bỏ bảng `fin_quotes` ở bản spec trước vì với dữ liệu EOD thì
+`ref`/`ceil`/`floor` không tồn tại, còn `last`/`prev_close` thì suy được — giữ hai
+bảng chỉ tạo cơ hội cho chúng lệch nhau.
+
+#### Luật cốt lõi: NHẬP TAY THẮNG
+
+```
+Cron KHÔNG ghi đè dòng có source='manual'.
+Ghi đè được dòng có source='auto:*' (giá nhà cung cấp sửa lại thì cập nhật theo).
+```
+
+Thiếu luật này thì lần chạy cron kế tiếp xoá sạch phần người dùng vừa sửa tay.
+Cùng hình dạng với `is_manual` của engine C ở **7.2** — và cùng một lý do.
+
+#### Hợp đồng adapter nhà cung cấp
+
+Phần còn lại của hệ thống không cần biết giá đến từ đâu. Nhà cung cấp chỉ phải
+thoả một hàm:
+
+```php
+interface GDSFIN_Quote_Source {
+    /** Tên ghi vào cột source, vd 'auto:xyz'. */
+    public function name(): string;
+
+    /**
+     * @param string[] $syms      danh sách mã cần lấy
+     * @param string   $trade_date phiên cần lấy, 'Y-m-d'
+     * @return array<string,string|null>  sym => close (chuỗi, ĐỒNG/cp) hoặc null nếu không có
+     * @throws Exception khi nguồn lỗi — cron ghi log, KHÔNG ghi giá rác
+     */
+    public function fetch_closes(array $syms, string $trade_date): array;
+}
+```
+
+Đổi nhà cung cấp về sau chỉ là viết một class mới; endpoint, bảng, UI không đổi.
+Nguồn nào cũng phải kiểm trước: điều khoản sử dụng có cho dùng kiểu này không,
+giới hạn số lần gọi, và có đủ mã mình cần không.
+
+#### Cron
+
+- Chạy **sau khi phiên kết thúc**. Sàn VN khớp ATC tới ~14:45, nên 15:30 là an toàn.
+- Chỉ lấy các mã **đang thực sự nắm giữ** (suy từ `fin_stock_txns`, `shares > 0`)
+  cộng các mã có phiên checklist đang mở. Không quét cả sàn — vô ích và tốn quota.
+- Nguồn lỗi thì **ghi log và bỏ qua**, không ghi `close = 0` hay giá cũ dưới ngày mới.
+- Không chạy vào ngày không phải phiên (T7/CN và `fin_market_holidays`).
+
+> **WP-Cron chỉ chạy khi có người truy cập.** Site ít traffic thì cron có thể
+> không nổ đúng 15:30. Nên đặt cron hệ thống thật gọi `wp-cron.php` theo giờ, và
+> tắt `DISABLE_WP_CRON` mặc định. Đây là thay đổi hạ tầng, không phải code plugin —
+> tôi nêu ra để bạn biết chứ không tự làm.
+
+#### Endpoint
+
+```
+GET    fin/quotes?syms=KDH,FPT          -> giá suy từ fin_quote_history + cờ cũ/mới
+GET    fin/quotes/history?sym=&from=&to=
+GET    fin/quotes/gaps                  -> mã đang nắm còn THIẾU giá phiên gần nhất
+PUT    fin/quotes/manual                -> nhập/sửa tay, ghi source='manual'
+DELETE fin/quotes/manual/{sym}/{date}   -> bỏ giá nhập tay, để cron lấy lại
+POST   fin/quotes/fetch                 -> chạy tay đợt lấy giá (fin_manage)
+```
+
+`GET fin/quotes` giữ **đúng hợp đồng ở 8.4** (`null` khi thiếu, `is_stale`,
+`stale_reason`), thêm `source` để UI phân biệt giá tự động và giá nhập tay:
+
+```json
+{
+  "as_of": "2026-08-01 15:32:10",
+  "last_trading_day": "2026-08-01",
+  "is_stale": false,
+  "stale_reason": null,
+  "quotes": {
+    "KDH": { "trade_date":"2026-08-01", "close":"19100.0000", "prev_close":"18950.0000",
+             "change":"150.0000", "change_pct":"0.79", "source":"manual" },
+    "FPT": null
+  }
+}
+```
+
+`GET fin/quotes/gaps` — đây là thứ điều khiển giao diện nhập tay bù:
+
+```json
+{ "last_trading_day":"2026-08-01",
+  "missing":[ { "sym":"FPT", "qty":"800", "last_known":{"trade_date":"2026-07-30","close":"98500.0000"} } ] }
+```
+
+`PUT fin/quotes/manual` — nhập nhiều mã một lượt:
+
+```json
+{ "quotes":[ { "sym":"KDH", "trade_date":"2026-08-01", "close":"19100" } ] }
+→ { "upserted": 1 }
+```
+
+Validate: `close > 0`; `trade_date` **không được ở tương lai** (chặn cứng, 400);
+`sym` phải có trong `fin_symbols` hoặc đang được nắm giữ. Ngày không phải phiên thì
+**cho ghi nhưng gắn cảnh báo** trong response — nhất quán với quyết định 7.9(c) là
+không chặn ngày cuối tuần.
+
+`DELETE fin/quotes/manual/{sym}/{date}` xoá cứng dòng đó. Đây là dữ liệu **tham
+chiếu**, không phải sổ nghiệp vụ của người dùng, nên không cần vết kiểm toán như
+`fin_stock_txns` — sửa sai thì xoá cho cron lấy lại là đúng, giữ `status='void'` ở
+đây chỉ làm truy vấn phức tạp thêm mà không được gì.
+
+#### Sparkline và biểu đồ khi dữ liệu thưa
+
+Nhập tay thì sẽ có phiên trống. Không nội suy, không lặp giá cũ để lấp:
+
+- `spark` trả các `close` **thực có**, kèm `spark_from` / `spark_to` để UI ghi đúng
+  khoảng thời gian thật, thay vì dán nhãn "7 ngày" cho dữ liệu 3 điểm.
+- `portfolio_series` chỉ có điểm ở những `trade_date` mà **mọi mã đang nắm** đều có
+  giá; phiên nào thiếu một mã thì bỏ phiên đó, và trả `series_coverage` để UI nói
+  được là đường biểu đồ dựa trên bao nhiêu phiên trong khoảng đã chọn.
+
+### 8.12 Điểm còn lại cần quyết
+
+**(d) Một hay nhiều tài khoản tiền.** `fin_accounts` cho phép nhiều. Nếu nhiều thì
+mọi số tổng (`cash_available`, `total_asset`) phải nói rõ đang gộp tài khoản nào,
+và màn Cài đặt cần chỗ quản lý danh sách tài khoản.
+
+**(e) Nhà cung cấp giá.** Chưa chọn, nhưng **không chặn việc cài**: bảng, endpoint,
+UI nhập tay bù, cron khung — làm được hết trước. Khi chọn xong chỉ cần viết một
+class thoả `GDSFIN_Quote_Source`. Trước khi chốt cần kiểm ba thứ: điều khoản sử
+dụng, giới hạn số lần gọi, độ phủ mã mình cần.
