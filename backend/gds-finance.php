@@ -7,7 +7,7 @@
  */
 defined('ABSPATH') || exit;
 
-define('GDSFIN_VERSION', '1.8.1');
+define('GDSFIN_VERSION', '1.9.0');
 define('GDSFIN_DB_VERSION', '1.8.0');
 define('GDSFIN_PATH', plugin_dir_path(__FILE__));
 define('GDSFIN_URL', plugin_dir_url(__FILE__));
@@ -80,6 +80,10 @@ add_shortcode('gds_finance_app', function () {
             'restUrl' => esc_url_raw(rest_url('fin/v1/')),
             'nonce'   => wp_create_nonce('wp_rest'),
             'user'    => wp_get_current_user()->display_name,
+            // Không truyền redirect: wp_logout_url() mặc định đưa về
+            // wp-login.php?loggedout=true, tức trang ĐĂNG NHẬP. Truyền home_url() thì
+            // sau khi đăng xuất lại về trang chủ, không thấy form đăng nhập.
+            'logoutUrl' => wp_logout_url(),
         ]);
     }
     return '<div id="gdsfin-root">Đang tải ứng dụng tài chính...</div>';
@@ -99,6 +103,8 @@ add_filter('template_include', function ($template) {
                 'restUrl' => esc_url_raw(rest_url('fin/v1/')),
                 'nonce'   => wp_create_nonce('wp_rest'),
                 'user'    => wp_get_current_user()->display_name,
+                // Xem ghi chú ở nhánh shortcode phía trên.
+                'logoutUrl' => wp_logout_url(),
             ]);
         }
         $custom = GDSFIN_PATH . 'templates/fullscreen-app.php';
@@ -106,3 +112,8 @@ add_filter('template_include', function ($template) {
     }
     return $template;
 });
+
+// Rút ngắn thời gian phiên cho app tài chính
+add_filter('auth_cookie_expiration', function ($length, $user_id, $remember) {
+    return $remember ? 12 * HOUR_IN_SECONDS : 2 * HOUR_IN_SECONDS;
+}, 10, 3);
