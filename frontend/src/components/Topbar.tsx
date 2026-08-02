@@ -1,5 +1,6 @@
 import type { ThemeName } from '../lib/theme';
 import type { ScreenTitle } from '../lib/nav';
+import { UserMenu } from './UserMenu';
 
 interface TopbarProps {
   screenTitle: ScreenTitle;
@@ -27,6 +28,12 @@ export function Topbar({ screenTitle, theme, onToggleTheme }: TopbarProps) {
         <button type="button" className="gf-theme-toggle" onClick={onToggleTheme}>
           {isLight ? '🌙' : '☀️'} Nền {isLight ? 'Tối' : 'Sáng'}
         </button>
+
+        <UserMenu
+          user={window.GDSFIN?.user}
+          logoutUrl={window.GDSFIN?.logoutUrl}
+          restUrl={window.GDSFIN?.restUrl}
+        />
       </div>
     </div>
   );

@@ -226,3 +226,138 @@
   font-size: 14px;
   font-weight: 600;
 }
+
+/* ---------- Người đăng nhập + Đăng xuất (góc phải Topbar) ---------- */
+
+.gf-user {
+  position: relative;
+}
+
+.gf-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px 6px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.gf-user-btn.on {
+  border-color: var(--accent);
+}
+
+.gf-user-av {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  flex: none;
+}
+
+.gf-user-name {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gf-user-caret {
+  font-size: 9px;
+  color: var(--muted2);
+}
+
+.gf-user-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.14);
+  z-index: 50;
+  text-align: left;
+}
+
+.gf-user-pop-name {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.gf-user-pop-sub {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.gf-user-pop-warn,
+.gf-user-pop-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  background: var(--panel2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 12px;
+}
+
+.gf-user-pop-warn b {
+  color: var(--down);
+}
+
+.gf-user-pop-note {
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+.gf-user-pop-note code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  background: var(--chip);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.gf-user-pop-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.gf-user-cancel,
+.gf-user-out {
+  flex: 1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.gf-user-cancel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--fg);
+}
+
+.gf-user-out {
+  border: none;
+  background: var(--down);
+  color: #fff;
+}

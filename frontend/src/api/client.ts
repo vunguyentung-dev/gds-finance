@@ -4,6 +4,12 @@ export interface GdsFinConfig {
   /** wp_localize_script có truyền, nhưng không phải lúc nào cũng có. */
   user?: string;
   version?: string;
+  /**
+   * URL đăng xuất do wp_logout_url() sinh ra, đã kèm nonce của hành động log-out.
+   * Thiếu trường này thì UserMenu tự lùi về /wp-login.php?action=logout — vẫn là luồng
+   * logout của WP, chỉ thêm một bước WP hỏi lại.
+   */
+  logoutUrl?: string;
 }
 
 declare global {
