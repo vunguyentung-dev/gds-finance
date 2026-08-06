@@ -9,7 +9,7 @@ import {
   type Symbol,
 } from '../../api/market';
 import { putManualQuotes } from '../../api/overview';
-import { formatDateTimeVN, formatDateVN, parseVNNumber } from '../../lib/format';
+import { formatDateTimeVN, formatDateVN, parseVNNumber, toDong } from '../../lib/format';
 import { BoardTable, type BoardRow } from './BoardTable';
 import { SymbolForm, type SymbolDraft } from './SymbolForm';
 import '../../styles/board.css';
@@ -298,7 +298,12 @@ export function BoardScreen() {
               saving={saving}
               onStartEdit={(sym) => {
                 setEditing(sym);
-                setEditValue('');
+                // Điền sẵn giá đang lưu để thấy đang là bao nhiêu trước khi sửa — nhưng
+                // CHỈ khi giá đó thuộc đúng phiên sắp ghi. Giá của phiên cũ hơn thì để
+                // trống, vì điền sẵn rồi bấm Lưu là đóng dấu giá cũ thành giá phiên mới.
+                const q = quotes?.quotes[sym] ?? null;
+                const sameSession = q !== null && q.trade_date === quotes?.last_trading_day;
+                setEditValue(sameSession ? toDong(Number(q.close_price)) : '');
                 setFormError('');
                 setNotice('');
               }}
