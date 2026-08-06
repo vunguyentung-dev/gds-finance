@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../../api/client';
-import {
-  getOverview,
-  getQuoteGaps,
-  putManualQuotes,
-  type Overview,
-  type QuoteGaps,
-} from '../../api/overview';
-import { formatDateVN, parseVNNumber } from '../../lib/format';
+import { getOverview, putManualQuotes, type Overview } from '../../api/overview';
+import { formatDateVN } from '../../lib/format';
 import { KpiCards } from './KpiCards';
 import { PortfolioChart } from './PortfolioChart';
 import { SectorAlloc } from './SectorAlloc';
 import { HoldingsTable } from './HoldingsTable';
-import { PriceGaps } from './PriceGaps';
+import { ManualPrices, type PriceDraftRow } from './ManualPrices';
 import '../../styles/overview.css';
 
 type ScreenState = 'loading' | 'ready' | 'error' | 'forbidden';
@@ -30,7 +24,6 @@ export function OverviewScreen() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const [ov, setOv] = useState<Overview | null>(null);
-  const [gaps, setGaps] = useState<QuoteGaps | null>(null);
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -38,11 +31,13 @@ export function OverviewScreen() {
   const [priceOk, setPriceOk] = useState('');
 
   const load = useCallback((ignore: { current: boolean }) => {
-    Promise.all([getOverview(), getQuoteGaps()]).then(
-      ([o, g]) => {
+    // Chỉ gọi fin/overview. Trước đây gọi thêm fin/quotes/gaps, nhưng HAI endpoint đó
+    // định nghĩa "thiếu giá" KHÁC nhau (xem ghi chú ở phần render), giữ cả hai làm
+    // nguồn cho cùng một khối UI là chỗ sinh ra bug panel bị ẩn.
+    getOverview().then(
+      (o) => {
         if (ignore.current) return;
         setOv(o);
-        setGaps(g);
         setState('ready');
       },
       (err) => {
@@ -64,26 +59,24 @@ export function OverviewScreen() {
     };
   }, [load]);
 
-  const handleSaveQuotes = async () => {
-    if (!gaps) return;
-    const quotes = Object.entries(drafts)
-      .map(([sym, raw]) => ({ sym, close: parseVNNumber(raw) }))
-      .filter((q) => q.close > 0)
-      .map((q) => ({ sym: q.sym, trade_date: gaps.last_trading_day, close: String(q.close) }));
-
-    if (quotes.length === 0) return;
+  const handleSaveQuotes = async (rows: PriceDraftRow[]) => {
+    if (!ov || rows.length === 0) return;
+    const session = ov.last_trading_day;
 
     setSaving(true);
     setPriceError('');
     setPriceOk('');
     try {
-      const res = await putManualQuotes(quotes);
+      const res = await putManualQuotes(rows.map((r) => ({ ...r, trade_date: session })));
+      // Xoá nháp rồi nạp lại overview: mọi số phụ thuộc giá (lãi/lỗ tạm tính, tổng tài
+      // sản, biểu đồ, phân bổ ngành) cập nhật ngay, không cần tải lại trang. Sau khi
+      // nạp lại, ô nhập tự lấy giá mới làm giá trị mặc định.
       setDrafts({});
-      const [o, g] = await Promise.all([getOverview(), getQuoteGaps()]);
-      setOv(o);
-      setGaps(g);
+      setOv(await getOverview());
       setPriceOk(
-        `Đã lưu giá cho ${res.upserted} mã.` + (res.warnings.length ? ` Lưu ý: ${res.warnings.join('; ')}` : ''),
+        `Đã lưu giá ${rows.map((r) => r.sym).join(', ')} cho phiên ${formatDateVN(session)}` +
+          ` (${res.upserted} dòng).` +
+          (res.warnings.length ? ` Lưu ý: ${res.warnings.join('; ')}` : ''),
       );
     } catch (err) {
       setPriceError(errorMessageOf(err));
@@ -127,19 +120,27 @@ export function OverviewScreen() {
     );
   }
 
-  if (!ov || !gaps) return null;
+  if (!ov) return null;
 
   const cov = ov.price_coverage;
-  const missingCount = cov.missing.length;
+  // HAI trạng thái khác nhau, trước đây bị lẫn thành một:
+  //  - noPrice : chưa có giá NÀO -> mọi số phụ thuộc giá hiện "—"
+  //  - stale   : có giá nhưng KHÔNG phải của phiên gần nhất -> số vẫn hiện, chỉ là cũ
+  // Trộn hai cái này chính là lý do panel nhập giá bị ẩn: overview báo "không thiếu"
+  // trong khi cả ba mã đều chưa có giá của phiên hiện tại.
+  const noPrice = cov.missing;
+  const stale = ov.holdings
+    .filter((h) => h.price !== null && h.price.trade_date !== ov.last_trading_day)
+    .map((h) => h.sym);
 
   return (
     <div className="gf-ov">
-      {missingCount > 0 && (
+      {noPrice.length > 0 && (
         <div className="gf-ov-warn">
           <span>⚠</span>
           <div>
             <b>
-              Thiếu giá đóng cửa của {missingCount}/{cov.held} mã đang nắm ({cov.missing.join(', ')}).
+              Chưa có giá nào cho {noPrice.length}/{cov.held} mã đang nắm ({noPrice.join(', ')}).
             </b>{' '}
             Các số phụ thuộc giá thị trường — tổng tài sản, giá trị danh mục, lãi/lỗ tạm tính — sẽ hiện “—” thay vì
             đoán. Giá vốn và tiền mặt vẫn chính xác.
@@ -147,19 +148,30 @@ export function OverviewScreen() {
         </div>
       )}
 
-      {missingCount > 0 && (
-        <PriceGaps
-          gaps={gaps}
-          drafts={drafts}
-          saving={saving}
-          error={priceError}
-          okMessage={priceOk}
-          onChange={(sym, value) => setDrafts((d) => ({ ...d, [sym]: value }))}
-          onSubmit={handleSaveQuotes}
-        />
+      {stale.length > 0 && (
+        <div className="gf-ov-warn">
+          <span>⚠</span>
+          <div>
+            <b>
+              {stale.length}/{cov.held} mã đang dùng giá của phiên cũ hơn {formatDateVN(ov.last_trading_day)} (
+              {stale.join(', ')}).
+            </b>{' '}
+            Các số vẫn tính ra được nhưng là số cũ. Nhập giá phiên gần nhất ở khối dưới để cập nhật.
+          </div>
+        </div>
       )}
 
-      {missingCount === 0 && priceOk && <div className="gf-ov-ok">{priceOk}</div>}
+      {/* LUÔN hiện, không phụ thuộc còn thiếu giá hay không — nhập sai phải sửa được */}
+      <ManualPrices
+        holdings={ov.holdings}
+        session={ov.last_trading_day}
+        drafts={drafts}
+        saving={saving}
+        error={priceError}
+        okMessage={priceOk}
+        onChange={(sym, value) => setDrafts((d) => ({ ...d, [sym]: value }))}
+        onSubmit={handleSaveQuotes}
+      />
 
       <KpiCards ov={ov} />
 
