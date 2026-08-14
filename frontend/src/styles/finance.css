@@ -212,7 +212,9 @@
 
 .gf-fin-form-grid {
   display: grid;
-  grid-template-columns: 150px 1fr 1fr 1.4fr 1fr auto;
+  /* Cột Loại 210px chứ không 150px như hồi chỉ có hai nút: ba nút trong 150px thì
+     mỗi nút còn 45px và chữ "Đầu tư" xuống dòng, đẩy cả hàng cao thêm 20px. */
+  grid-template-columns: 210px 1fr 1fr 1.4fr 1fr auto;
   gap: 10px;
   align-items: end;
   margin-top: 14px;
@@ -225,7 +227,7 @@
   "Chiều" (Nộp/Rút) thay vào. Cần rộng hơn 1fr vì chứa hai nút chữ.
 */
 .gf-fin-form-grid.is-inv {
-  grid-template-columns: 150px 170px 1fr 1fr 1.6fr auto;
+  grid-template-columns: 210px 180px 1fr 1fr 1.6fr auto;
 }
 
 .gf-fin-form-label {
@@ -247,7 +249,9 @@
 .gf-fin-type-btn {
   flex: 1;
   text-align: center;
-  padding: 10px;
+  /* nowrap: nhãn xuống dòng làm cả hàng form cao lệch so với các ô bên cạnh */
+  white-space: nowrap;
+  padding: 10px 6px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 700;
