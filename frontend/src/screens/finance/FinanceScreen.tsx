@@ -5,14 +5,17 @@ import {
   deleteEntry,
   getCategories,
   getEntries,
+  getInvested,
   getSummary,
   type EntryType,
   type FinCategories,
   type FinEntry,
   type FinSummary,
+  type Invested,
 } from '../../api/finance';
 import { parseVNNumber, todayIso } from '../../lib/format';
 import { categoryColor } from './constants';
+import { isInvType, overdrawError } from './entryType';
 import { StatCards } from './StatCards';
 import { MonthlyChart } from './MonthlyChart';
 import { CategoryBreakdown } from './CategoryBreakdown';
@@ -42,6 +45,12 @@ export function FinanceScreen() {
   const [categories, setCategories] = useState<FinCategories | null>(null);
   const [entries, setEntries] = useState<FinEntry[] | null>(null);
   const [summary, setSummary] = useState<FinSummary | null>(null);
+  /**
+   * Đọc riêng, KHÔNG gộp vào Promise.all bên dưới. fin/invested là endpoint mới; nếu
+   * backend chưa áp patch thì nó trả 404, và gộp vào sẽ làm cả màn không tải được.
+   * Đọc riêng thì thiếu vốn ròng chỉ mất một thẻ, phần còn lại chạy bình thường.
+   */
+  const [invested, setInvested] = useState<Invested | null>(null);
 
   const [yearFilter, setYearFilter] = useState('auto');
   const [monthFilter, setMonthFilter] = useState('auto');
@@ -58,6 +67,15 @@ export function FinanceScreen() {
 
   const loadInitial = useCallback(
     (ignore: { current: boolean }) => {
+      getInvested().then(
+        (inv) => {
+          if (!ignore.current) setInvested(inv);
+        },
+        () => {
+          /* endpoint chưa có: giữ null, thẻ vốn hiện — */
+        },
+      );
+
       Promise.all([getCategories(), getEntries(), getSummary()]).then(
         ([cats, entryList, sum]) => {
           if (ignore.current) return;
@@ -106,10 +124,22 @@ export function FinanceScreen() {
     ]);
     setEntries(entryList);
     setSummary(sum);
+    // Vốn ròng đọc lại NGAY sau mỗi lần ghi/xóa, không đợi tải lại trang.
+    // Lỗi ở đây không được làm hỏng phần đã cập nhật xong ở trên.
+    try {
+      setInvested(await getInvested());
+    } catch {
+      /* giữ số cũ, thà cũ còn hơn xoá mất số đang hiện */
+    }
   }, [yearFilter]);
 
   const handleTypeChange = (type: EntryType) => {
-    setDraft((d) => ({ ...d, type, cat: categories?.[type]?.[0] ?? '' }));
+    // Khoản đầu tư không có danh mục — cat để rỗng, backend tự đóng dấu theo chiều.
+    setDraft((d) => ({
+      ...d,
+      type,
+      cat: isInvType(type) ? '' : categories?.[type]?.[0] ?? '',
+    }));
   };
 
   const handleFieldChange = (key: 'date' | 'amount' | 'note' | 'cat', value: string) => {
@@ -119,14 +149,25 @@ export function FinanceScreen() {
   const handleSubmit = async () => {
     // Ô nhập theo ĐỒNG đầy đủ — gửi thẳng, không quy đổi. DB cũng lưu theo đồng.
     const amountDong = parseVNNumber(draft.amount);
-    if (!amountDong || !draft.date || !draft.cat) return;
+    const isInv = isInvType(draft.type);
+    if (!amountDong || !draft.date) return;
+    if (!isInv && !draft.cat) return;
+
+    // Chặn tại client cho phản hồi tức thì; backend vẫn kiểm lại lần nữa vì client
+    // có thể đang giữ số vốn ròng cũ.
+    const overdraw = overdrawError(draft.type, amountDong, invested?.net ?? null);
+    if (overdraw) {
+      setFormError(overdraw);
+      return;
+    }
+
     setSubmitting(true);
     setFormError('');
     try {
       await createEntry({
         entry_type: draft.type,
         amount: String(amountDong),
-        cat: draft.cat,
+        ...(isInv ? {} : { cat: draft.cat }),
         note: draft.note.trim(),
         entry_date: draft.date,
       });
@@ -246,7 +287,7 @@ export function FinanceScreen() {
         </select>
       </div>
 
-      <StatCards summary={summary} curYear={curYear} curMonth={curMonth} />
+      <StatCards summary={summary} curYear={curYear} curMonth={curMonth} invested={invested} />
 
       <div className="gf-finance-charts">
         <MonthlyChart bars={chartBars} yearLabel={`Năm ${curYear}`} />
@@ -256,6 +297,7 @@ export function FinanceScreen() {
       <EntryForm
         draft={draft}
         categories={categories}
+        investedNet={invested?.net ?? null}
         submitting={submitting}
         error={formError}
         onTypeChange={handleTypeChange}

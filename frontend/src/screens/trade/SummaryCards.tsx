@@ -1,3 +1,4 @@
+import type { Invested } from '../../api/finance';
 import type { SummaryCards as Cards } from '../../api/stock';
 import { formatVN, signedDong, toDong } from '../../lib/format';
 
@@ -12,11 +13,21 @@ function realizedColor(v: number): string {
 
 interface Props {
   cards: Cards;
+  /**
+   * Vốn nộp vào TK chứng khoán, từ fin/invested — CỘNG DỒN TOÀN BỘ lịch sử.
+   * null = chưa đọc được (endpoint chưa có, hoặc lỗi mạng): hiện — chứ không hiện 0.
+   * Số này KHÔNG do engine nào tính; nó là tiền user tự khai ở màn Tài chính cá nhân.
+   */
+  invested: Invested | null;
 }
 
-export function SummaryCards({ cards }: Props) {
+export function SummaryCards({ cards, invested }: Props) {
   const realized = Number(cards.total_realized);
   const pct = cards.total_realized_pct === null ? null : Number(cards.total_realized_pct);
+  // Phân biệt "chưa khai khoản đầu tư nào" với "không đọc được số" — hai lý do khác
+  // nhau, cùng hiện — nhưng dòng phụ phải nói đúng cái nào.
+  const invData =
+    invested !== null && (Number(invested.in) > 0 || Number(invested.out) > 0) ? invested : null;
 
   return (
     <div className="gf-trade-cards">
@@ -42,6 +53,29 @@ export function SummaryCards({ cards }: Props) {
             <b>{toDong(Number(cards.total_net_sell))}</b>
           </div>
         </div>
+      </div>
+
+      <div className="gf-trade-card gf-trade-card-cap">
+        <div className="gf-trade-card-label">Vốn thực có</div>
+        {invData !== null ? (
+          <>
+            <div className="gf-trade-card-num gf-num" style={{ color: 'var(--accent)' }}>
+              {toDong(Number(invData.net))} ₫
+            </div>
+            <div className="gf-trade-card-sub gf-num">
+              Đã nộp {toDong(Number(invData.in))} · đã rút {toDong(Number(invData.out))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="gf-trade-card-num gf-num">—</div>
+            <div className="gf-trade-card-sub">
+              {invested === null
+                ? 'Chưa đọc được số vốn đã nộp.'
+                : 'Chưa có khoản đầu tư nào. Nhập ở màn Tài chính cá nhân → Đầu tư.'}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="gf-trade-card">

@@ -63,11 +63,26 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - Mỗi màn xử lý đủ 4 trạng thái: loading, empty, error, forbidden(401)
 
 ## Endpoint hiện có (chỉ dùng những cái này)
-- GET    fin/categories        -> { in:[...], out:[...] }
+- GET    fin/categories        -> { in:[...], out:[...] }  (KHÔNG có khoá inv_*)
 - GET    fin/entries           -> [{id, entry_type, amount, cat, note, entry_date}]
-- POST   fin/entries           body {entry_type:'in'|'out', amount(đồng, chuỗi), cat, note, entry_date}
-- DELETE fin/entries/{id}
+- POST   fin/entries           body {entry_type:'in'|'out'|'inv_in'|'inv_out',
+                                     amount(đồng, chuỗi), cat, note, entry_date}
+                               cat CHỈ gửi cho 'in'/'out'; loại inv_* backend tự đóng cat
+- DELETE fin/entries/{id}      409 nếu xóa inv_in làm vốn ròng âm
 - GET    fin/summary?year=YYYY -> {year, years[], monthly[12]{in,out}, catTotals{}, inYear, outYear, net}
+                               KHÔNG đếm inv_in/inv_out vào bất kỳ số nào ở đây
+- GET    fin/invested          -> {in, out, net} vốn nộp/rút TK chứng khoán,
+                               CỘNG DỒN TOÀN BỘ lịch sử, không nhận year/month
+
+## Đầu tư tài chính — xem api-spec mục 14
+entry_type 'inv_in'/'inv_out' là CHUYỂN TIỀN giữa hai túi của chính user, KHÔNG phải
+thu/chi. Chúng KHÔNG vào Thu/Chi tháng, Thu/Chi năm, biểu đồ 12 tháng, chi tiêu theo
+loại, dòng tiền ròng. Gộp vào là méo báo cáo sinh hoạt (nạp 1 tỷ hiện thành tháng chi
+1 tỷ). Nhánh `else` trong summary() bắt mọi thứ khác 'in', nên phải chặn tường minh.
+Cột entry_type là VARCHAR(10): VARCHAR(3) cắt âm thầm cả hai thành 'inv', mất chiều tiền.
+Vốn ròng không được âm — chặn ở CẢ POST (rút quá số nộp) và DELETE (xóa lệnh nộp).
+CATS['out'] vẫn có danh mục chi tên 'Đầu tư'; bản ghi cũ đó VẪN là chi, không migrate.
+Vì vậy nhãn trong sổ là "Nộp vào TK"/"Rút khỏi TK", không dùng chữ "Đầu tư".
 
 ## Endpoint cổ phiếu / thị trường (mục 3, 7, 8, 9 của docs/api-spec.md)
 - GET|POST   fin/stock-txns          POST nhận thêm lot_matches (tùy chọn, chỉ lệnh bán)
