@@ -8,10 +8,27 @@ defined('ABSPATH') || exit;
  */
 class GDSFIN_Personal {
 
+    /**
+     * Danh mục CHI không còn 'Đầu tư': nộp tiền vào TK chứng khoán giờ có loại riêng
+     * (INV_CATS bên dưới) và KHÔNG phải là chi tiêu. Bỏ khỏi đây để không nhập mới
+     * được nữa. Bản ghi CŨ mang cat 'Đầu tư' vẫn giữ nguyên và VẪN tính là chi —
+     * summary() không đối chiếu cat với hằng số này, nên số cũ không đổi.
+     */
     const CATS = [
         'in'  => ['Lương', 'Thưởng', 'Cổ tức', 'Kinh doanh', 'Khác'],
-        'out' => ['Mua sắm', 'Đồ dùng thiết yếu', 'Đầu tư', 'Ăn uống', 'Di chuyển', 'Hóa đơn', 'Khác'],
+        'out' => ['Mua sắm', 'Đồ dùng thiết yếu', 'Ăn uống', 'Di chuyển', 'Hóa đơn', 'Khác'],
     ];
+
+    /**
+     * Chuyển tiền giữa hai túi của chính user — KHÔNG phải thu/chi sinh hoạt.
+     * cat do backend đóng dấu, client không gửi: form chỉ có Nộp/Rút.
+     */
+    const INV_CATS = [
+        'inv_in'  => 'Nộp vào TK chứng khoán',
+        'inv_out' => 'Rút khỏi TK chứng khoán',
+    ];
+
+    const S = GDSFIN_Util::S;
 
     public static function register_routes() {
         $can_view   = fn() => current_user_can('fin_view');
@@ -48,6 +65,13 @@ class GDSFIN_Personal {
             'callback'            => [self::class, 'summary'],
             'permission_callback' => $can_view,
         ]);
+
+        // Vốn ròng đã bỏ vào thị trường — CỘNG DỒN TOÀN BỘ, không lọc năm/tháng
+        register_rest_route('fin/v1', '/fin/invested', [
+            'methods'             => 'GET',
+            'callback'            => [self::class, 'invested'],
+            'permission_callback' => $can_view,
+        ]);
     }
 
     private static function table() {
@@ -64,7 +88,7 @@ class GDSFIN_Personal {
         $sql = "CREATE TABLE $t (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             user_id BIGINT UNSIGNED NOT NULL,
-            entry_type VARCHAR(3) NOT NULL,
+            entry_type VARCHAR(10) NOT NULL,
             amount DECIMAL(20,4) NOT NULL,
             cat VARCHAR(100) NOT NULL,
             note VARCHAR(500) NULL,
@@ -95,21 +119,46 @@ class GDSFIN_Personal {
         $uid = get_current_user_id();
         $b   = $req->get_json_params();
 
-        $type = ($b['entry_type'] ?? '') === 'in' ? 'in' : 'out';
-        $cat  = sanitize_text_field($b['cat'] ?? '');
-        if (!in_array($cat, self::CATS[$type], true)) {
-            return new WP_Error('bad_cat', 'Danh mục không hợp lệ', ['status' => 400]);
+        $type = (string)($b['entry_type'] ?? '');
+        if (!in_array($type, ['in', 'out', 'inv_in', 'inv_out'], true)) {
+            return new WP_Error('bad_type', 'Loại khoản không hợp lệ', ['status' => 400]);
         }
+
+        if (isset(self::INV_CATS[$type])) {
+            // cat của khoản đầu tư do backend đóng, bỏ qua giá trị client gửi
+            $cat = self::INV_CATS[$type];
+        } else {
+            $cat = sanitize_text_field($b['cat'] ?? '');
+            if (!in_array($cat, self::CATS[$type], true)) {
+                return new WP_Error('bad_cat', 'Danh mục không hợp lệ', ['status' => 400]);
+            }
+        }
+
         $amount = (float)($b['amount'] ?? 0);   // đã theo ĐỒNG
         if ($amount <= 0) {
             return new WP_Error('bad_amount', 'Số tiền phải lớn hơn 0', ['status' => 400]);
         }
+        $amount_s = number_format($amount, 4, '.', '');
+
+        // Vốn ròng không được âm: không rút quá số đã nộp.
+        // So sánh bằng bccomp trên chuỗi, không so bằng float.
+        if ($type === 'inv_out') {
+            $net = self::invested_totals($uid)['net'];
+            if (bccomp($amount_s, $net, 4) > 0) {
+                return new WP_Error('inv_overdraw', sprintf(
+                    'Không rút được %s ₫: vốn ròng hiện có %s ₫.',
+                    number_format((float)$amount_s, 0, ',', '.'),
+                    number_format((float)$net, 0, ',', '.')
+                ), ['status' => 400, 'net' => GDSFIN_Util::money_out($net)]);
+            }
+        }
+
         $date = sanitize_text_field($b['entry_date'] ?? GDSFIN_Util::today());
 
         $wpdb->insert(self::table(), [
             'user_id'    => $uid,
             'entry_type' => $type,
-            'amount'     => number_format($amount, 4, '.', ''),
+            'amount'     => $amount_s,
             'cat'        => $cat,
             'note'       => sanitize_text_field($b['note'] ?? ''),
             'entry_date' => $date,
@@ -122,8 +171,29 @@ class GDSFIN_Personal {
         global $wpdb;
         $uid = get_current_user_id();
         $id  = absint($req['id']);
-        // chỉ xóa bản ghi của chính mình
-        $deleted = $wpdb->delete(self::table(), ['id' => $id, 'user_id' => $uid]);
+        $t   = self::table();
+
+        // chỉ đọc/xóa bản ghi của chính mình
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT entry_type, amount FROM $t WHERE id = %d AND user_id = %d",
+            $id, $uid
+        ), ARRAY_A);
+        if (!$row) {
+            return rest_ensure_response(['deleted' => 0]);
+        }
+
+        // Xóa một khoản NỘP có thể đẩy vốn ròng xuống âm. Chặn, giữ đúng bất biến —
+        // nếu không thì cấm rút quá số nộp ở create_entry sẽ đi vòng qua đây được.
+        if ($row['entry_type'] === 'inv_in') {
+            $net = self::invested_totals($uid)['net'];
+            if (bccomp((string)$row['amount'], $net, 4) > 0) {
+                return new WP_Error('inv_underflow',
+                    'Xóa khoản nộp này sẽ làm vốn ròng âm. Hãy xóa khoản rút liên quan trước.',
+                    ['status' => 409]);
+            }
+        }
+
+        $deleted = $wpdb->delete($t, ['id' => $id, 'user_id' => $uid]);
         return rest_ensure_response(['deleted' => (int)$deleted]);
     }
 
@@ -152,6 +222,11 @@ class GDSFIN_Personal {
 
         foreach ($rows as $r) {
             if ((int)$r['y'] !== $curYear) continue;
+            // 'inv_in'/'inv_out' là chuyển tiền giữa hai túi của chính user.
+            // KHÔNG vào Thu/Chi tháng, Thu/Chi năm, biểu đồ 12 tháng, chi tiêu theo
+            // loại, dòng tiền ròng năm. Nhánh else phía dưới bắt MỌI thứ khác 'in',
+            // nên thiếu dòng này thì nạp 1 tỷ sẽ hiện thành tháng chi 1 tỷ.
+            if ($r['entry_type'] !== 'in' && $r['entry_type'] !== 'out') continue;
             $amt = (float)$r['amount']; $m = (int)$r['m'];
             if ($r['entry_type'] === 'in') {
                 $monthly[$m]['in'] += $amt; $inYear += $amt;
@@ -170,6 +245,39 @@ class GDSFIN_Personal {
             'inYear'    => $inYear,
             'outYear'   => $outYear,
             'net'       => $inYear - $outYear,
+        ]);
+    }
+
+    /**
+     * Tổng đã nộp / đã rút / vốn ròng, CỘNG DỒN TOÀN BỘ LỊCH SỬ.
+     * Không lọc năm, không lọc tháng — đây là số dư luỹ kế, không phải báo cáo kỳ.
+     * SUM() trên DECIMAL(20,4) trả chuỗi thập phân chính xác; trừ bằng bcsub.
+     */
+    public static function invested_totals(int $uid): array {
+        global $wpdb;
+        $t = self::table();
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT entry_type, SUM(amount) AS total
+               FROM $t
+              WHERE user_id = %d AND entry_type IN ('inv_in', 'inv_out')
+              GROUP BY entry_type",
+            $uid
+        ), ARRAY_A);
+
+        $in = '0'; $out = '0';
+        foreach ($rows as $r) {
+            if ($r['entry_type'] === 'inv_in')  { $in  = (string)$r['total']; }
+            if ($r['entry_type'] === 'inv_out') { $out = (string)$r['total']; }
+        }
+        return ['in' => $in, 'out' => $out, 'net' => bcsub($in, $out, self::S)];
+    }
+
+    public static function invested(WP_REST_Request $req) {
+        $t = self::invested_totals(get_current_user_id());
+        return rest_ensure_response([
+            'in'  => GDSFIN_Util::money_out($t['in']),
+            'out' => GDSFIN_Util::money_out($t['out']),
+            'net' => GDSFIN_Util::money_out($t['net']),
         ]);
     }
 }

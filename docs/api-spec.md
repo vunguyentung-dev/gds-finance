@@ -2390,14 +2390,20 @@ thường.
 
 ### 14.8 Không migrate
 
-Bản ghi `in`/`out` cũ **giữ nguyên**. Đặc biệt: `CATS['out']` đã có sẵn một danh mục
-chi tên `'Đầu tư'`, và bản ghi cũ mang danh mục đó **vẫn tính là chi**.
+Bản ghi `in`/`out` cũ **giữ nguyên**. `CATS['out']` trước đây có một danh mục chi tên
+`'Đầu tư'` — nay **đã bỏ**, nên không nhập mới được nữa. Bản ghi cũ mang danh mục đó
+**vẫn tính là chi**: `summary()` không đối chiếu `cat` với `CATS`, nó chỉ cộng theo
+`entry_type`. Bỏ khỏi hằng số chặn đường vào, không đụng dữ liệu đã có.
 
-| | `entry_type` | Vào Chi tháng/năm? | Vào vốn ròng? |
-|---|---|---|---|
-| Danh mục chi cũ `'Đầu tư'` | `out` | **CÓ** | không |
-| Loại mới Nộp vào | `inv_in` | không | **CÓ** |
+| | `entry_type` | Nhập mới được? | Vào Chi tháng/năm? | Vào vốn ròng? |
+|---|---|---|---|---|
+| Danh mục chi cũ `'Đầu tư'` | `out` | **không** | **CÓ** (bản ghi cũ) | không |
+| Loại mới Nộp vào | `inv_in` | có | không | **CÓ** |
 
 Vì thế UI **không** dùng chữ "Đầu tư" làm nhãn trong sổ giao dịch — nhãn là "Nộp vào
 TK" / "Rút khỏi TK". Hai thứ khác nhau thì phải khác tên, không thì sổ đọc ra hai
 dòng giống nhau mà một dòng vào báo cáo chi, một dòng không.
+
+Tại thời điểm áp patch, DB **không có bản ghi nào** mang `cat = 'Đầu tư'` (đã đếm:
+0). Hành vi "bản ghi cũ vẫn là chi" vẫn được kiểm bằng cách dựng một bản ghi giả rồi
+xoá đi — nó cộng đúng vào `outYear` và hiện đúng trong `catTotals`.

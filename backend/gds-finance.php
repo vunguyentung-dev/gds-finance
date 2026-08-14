@@ -7,8 +7,8 @@
  */
 defined('ABSPATH') || exit;
 
-define('GDSFIN_VERSION', '1.9.1');
-define('GDSFIN_DB_VERSION', '1.8.0');
+define('GDSFIN_VERSION', '1.10.0');
+define('GDSFIN_DB_VERSION', '1.9.0');
 define('GDSFIN_PATH', plugin_dir_path(__FILE__));
 define('GDSFIN_URL', plugin_dir_url(__FILE__));
 

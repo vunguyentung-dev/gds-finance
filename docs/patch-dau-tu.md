@@ -1,6 +1,11 @@
 # Patch backend — loại giao dịch "Đầu tư tài chính"
 
-Bạn tự áp phần này. Chỉ sửa **2 file**: `backend/includes/class-fin-personal.php`
+> **ĐÃ ÁP XONG** ngày 2026-08-15, trên nhánh `feature/dau-tu-tai-chinh-20260814`,
+> theo mục "Nới phạm vi tạm thời — chỉ để áp patch đầu tư tài chính" của CLAUDE.md.
+> Kèm quyết định ở mục 3: **bỏ** `'Đầu tư'` khỏi `CATS['out']`.
+> Verify trên bảng thật: 58 OK · 0 LỆCH. Giữ file này làm hồ sơ thay đổi.
+
+Chỉ sửa **2 file**: `backend/includes/class-fin-personal.php`
 và `backend/gds-finance.php`.
 
 ## 0. Tóm tắt phải đọc trước
@@ -231,7 +236,7 @@ trong ô chọn năm — đúng, vì năm đó có dữ liệu; các số thu/ch
     }
 ```
 
-## 3. Một điểm đặt tên dễ nhầm — bạn quyết
+## 3. Một điểm đặt tên dễ nhầm — ĐÃ QUYẾT: bỏ
 
 `CATS['out']` **đã có sẵn** một danh mục chi tên là **`'Đầu tư'`**. Từ giờ trong app
 có hai thứ khác nhau cùng mang chữ "đầu tư":
@@ -245,9 +250,9 @@ Bạn yêu cầu không migrate, nên các bản ghi cũ `out`/`'Đầu tư'` **
 đúng như đã chốt. Frontend đã tránh nhầm lẫn bằng cách gắn nhãn khoản mới là
 "Nộp vào TK" / "Rút khỏi TK", không dùng chữ "Đầu tư" trong sổ giao dịch.
 
-Nếu muốn dứt điểm, **bỏ `'Đầu tư'` khỏi `CATS['out']`** để không nhập mới được nữa
-trong khi bản ghi cũ vẫn nguyên. Việc này thay đổi output của `fin/categories`, nên
-tôi không tự làm — bạn quyết.
+**Đã chọn bỏ.** `'Đầu tư'` không còn trong `CATS['out']`, nên nhập mới trả `bad_cat`.
+Bản ghi cũ vẫn nguyên và vẫn tính là chi — `summary()` cộng theo `entry_type`, không
+đối chiếu `cat` với hằng số này. Output `fin/categories` đổi: `out` còn 6 mục.
 
 ## 4. Soát sau khi áp
 
