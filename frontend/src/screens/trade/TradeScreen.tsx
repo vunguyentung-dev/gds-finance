@@ -16,6 +16,7 @@ import {
   type StockTxn,
   type TxnType,
 } from '../../api/stock';
+import { getInvested, type Invested } from '../../api/finance';
 import { parseVNNumber, todayIso } from '../../lib/format';
 import { SummaryCards } from './SummaryCards';
 import { TxnForm, type TxnDraft } from './TxnForm';
@@ -79,7 +80,22 @@ export function TradeScreen() {
   const [lotMode, setLotMode] = useState<LotMode>('auto');
   const [pins, setPins] = useState<Record<string, string>>({});
 
+  // Vốn user tự khai ở màn Tài chính cá nhân. null = chưa đọc được.
+  const [invested, setInvested] = useState<Invested | null>(null);
+
   const load = useCallback((ignore: { current: boolean }) => {
+    // Đọc riêng, ngoài Promise.all: fin/invested thuộc màn Tài chính cá nhân, không
+    // phải nguồn số của màn này. Nó lỗi thì mất một thẻ, không được làm sập cả màn
+    // Giao dịch — và nó là endpoint mới, có thể chưa được áp ở backend.
+    getInvested().then(
+      (inv) => {
+        if (!ignore.current) setInvested(inv);
+      },
+      () => {
+        /* giữ null: thẻ Vốn thực có hiện — */
+      },
+    );
+
     Promise.all([getStockSummary(), getStockTxns(), getRates()]).then(
       ([sum, list, rs]) => {
         if (ignore.current) return;
@@ -329,7 +345,7 @@ export function TradeScreen() {
 
   return (
     <div className="gf-trade">
-      <SummaryCards cards={summary.cards} />
+      <SummaryCards cards={summary.cards} invested={invested} />
 
       <TxnForm
         draft={draft}

@@ -6,9 +6,14 @@
 
 /* ---------- 3 thẻ tổng hợp ---------- */
 
+/*
+  4 thẻ từ khi thêm "Vốn thực có". minmax(0,1fr) để số tiền dài (1.100.000.000 ₫)
+  không đẩy tràn cột — CLAUDE.md cấm rút gọn ra "tr" nên chuỗi buộc phải dài.
+  auto-fit: hẹp thì xuống dòng chứ không bóp chữ.
+*/
 .gf-trade-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 14px;
 }
 
@@ -29,6 +34,29 @@
   font-size: 24px;
   font-weight: 700;
   margin-top: 6px;
+}
+
+/*
+  Thẻ "Vốn thực có": số dài nhất trên màn, hạ một cỡ để đủ chỗ trong cột 210px.
+  Viền trái màu accent để tách khỏi các thẻ của engine — số này KHÔNG do engine nào
+  tính, nó là tiền user tự khai ở màn Tài chính cá nhân.
+*/
+.gf-trade-card-cap {
+  border-left: 3px solid var(--accent);
+}
+
+.gf-trade-card-cap .gf-trade-card-num {
+  /* "1.100.000.000 ₫" = 15 ký tự; ở 18px mono ≈ 162px + padding 36 = 198px, vừa cột
+     hẹp nhất mà auto-fit sinh ra (214px). Cỡ 24px như các thẻ khác thì tràn. */
+  font-size: 18px;
+}
+
+.gf-trade-card-sub {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 6px;
+  line-height: 1.45;
 }
 
 .gf-trade-hero {

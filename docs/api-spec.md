@@ -2273,3 +2273,137 @@ nhầm đều đạt: `HPGas`, `gas` (chữ thường), `GAS1`, `Hpg` (sai kiể
 - Gắn cờ **Lưu** ghi được xuống `fin_news_flags` và viền thẻ đổi theo
 - Màn **Cài đặt**: thêm nguồn (thử ngay, báo kết quả), nguồn mặc định khoá không xoá
 - Cả hai theme Sáng / Tối
+
+---
+
+## 14. Loại giao dịch "Đầu tư tài chính" — vốn ròng vào thị trường
+
+### 14.1 Vấn đề
+
+Trước mục này, `fin_personal` chỉ có hai `entry_type`: `in` (thu) và `out` (chi).
+Người dùng nạp tiền vào tài khoản chứng khoán thì không có chỗ nào ghi, mà ghi thành
+`out` thì **méo toàn bộ báo cáo sinh hoạt**: nạp 1 tỷ hiện thành một tháng chi 1 tỷ,
+biểu đồ 12 tháng dựng một cột át hết các cột còn lại, và "chi tiêu theo loại" báo
+99% ngân sách đi vào một mục.
+
+Gốc của sự méo: nạp tiền **không phải chi tiêu**. Tiền không rời khỏi tài sản của
+user, nó chỉ đổi từ túi sinh hoạt sang túi chứng khoán. Chi tiêu là tiền đi mất.
+
+### 14.2 Hai `entry_type` mới
+
+| `entry_type` | Nghĩa | `cat` |
+|---|---|---|
+| `inv_in`  | Nộp vào TK chứng khoán | `'Nộp vào TK chứng khoán'` |
+| `inv_out` | Rút khỏi TK chứng khoán | `'Rút khỏi TK chứng khoán'` |
+
+`cat` **do backend đóng dấu**, client không gửi. Form chỉ có Nộp/Rút · Ngày · Số
+tiền · Ghi chú — không có ô danh mục. `fin/categories` **không đổi output**, vẫn
+đúng hai khoá `in`/`out`.
+
+**Cột `entry_type` phải là `VARCHAR(10)`.** Bản đầu là `VARCHAR(3)`, vừa đủ
+`in`/`out`. `inv_in` dài 6, `inv_out` dài 7 — MySQL không strict sẽ **cắt âm thầm cả
+hai thành `inv`**, mất chiều tiền, không phục hồi được. Nới cột đi kèm nâng
+`GDSFIN_DB_VERSION` (nếu không nâng thì `dbDelta` không chạy).
+
+### 14.3 Bất biến: `inv_*` không được vào bất kỳ số nào của `fin/summary`
+
+`inv_in` và `inv_out` **KHÔNG** cộng vào: `monthly[].in`, `monthly[].out`, `inYear`,
+`outYear`, `net`, `catTotals`.
+
+Chỗ dễ sai nằm ở chính cấu trúc vòng lặp cũ trong `summary()`:
+
+```php
+if ($r['entry_type'] === 'in') { ...thu... }
+else                            { ...chi... }   // <-- nhánh này bắt MỌI thứ khác 'in'
+```
+
+Nhánh `else` không kiểm `=== 'out'`, nên thêm hai loại mới mà không sửa gì thì
+`inv_in` **và** `inv_out` **đều** rơi vào chi. Phải chặn tường minh:
+
+```php
+if ($r['entry_type'] !== 'in' && $r['entry_type'] !== 'out') continue;
+```
+
+`years` thì **để nguyên**, vẫn dựng từ mọi bản ghi: năm chỉ có khoản đầu tư vẫn nên
+hiện trong ô chọn năm, các số thu/chi của năm đó bằng 0 — đúng, không phải lỗi.
+
+### 14.4 `GET fin/invested`
+
+```json
+{ "in": "1500000000.0000", "out": "400000000.0000", "net": "1100000000.0000" }
+```
+
+- Tiền theo **ĐỒNG**, dạng **chuỗi** (số lớn, không để JS làm tròn).
+- **CỘNG DỒN TOÀN BỘ LỊCH SỬ** — không nhận `year`, không nhận `month`. Đây là số
+  dư luỹ kế, không phải báo cáo kỳ. Đó là lý do nó là endpoint riêng chứ không phải
+  thêm khoá vào `fin/summary` (endpoint đó lọc theo năm).
+- `SUM()` trên `DECIMAL(20,4)` trả chuỗi thập phân chính xác; `net = bcsub(in, out)`.
+  Không cộng dồn bằng float ở đâu cả.
+
+### 14.5 Bất biến: `net >= 0`
+
+Không rút được quá số đã nộp. Chặn ở **hai** chỗ, thiếu một chỗ là đi vòng được:
+
+| Hành động | Kiểm tra | Lỗi |
+|---|---|---|
+| `POST fin/entries` với `inv_out` | `amount <= net` | 400 `inv_overdraw` |
+| `DELETE fin/entries/{id}` của một `inv_in` | `amount <= net` | 409 `inv_underflow` |
+
+Chỉ chặn ở POST là hở: nộp 1 tỷ → rút 1 tỷ → xóa lệnh nộp ⇒ `net = −1 tỷ`.
+
+So sánh bằng `bccomp` trên chuỗi. So bằng float thì hai số 20 chữ số bằng nhau có
+thể ra khác nhau.
+
+### 14.6 UI
+
+**Màn Tài chính cá nhân**
+
+- Nút loại thành **ba**: Thu · Chi · Đầu tư. Chọn Đầu tư thì hiện thêm ô **Chiều**
+  (Nộp vào / Rút ra) và **ẩn** ô danh mục.
+- Màu: Thu `--up`, Chi `--down`, Đầu tư `--accent` — cố ý không dùng xanh/đỏ, vì
+  chuyển tiền giữa hai túi không có lãi cũng không có lỗ.
+- Dấu trước số trong sổ: `+` thu, `−` chi, `→` nộp vào, `←` rút ra. Không dùng `+`/`−`
+  cho khoản đầu tư vì tiền không sinh ra cũng không mất đi.
+- Dòng đầu tư trong sổ có nền `--accentSoft`.
+- Thẻ thống kê thứ sáu: **"Vốn đã bỏ vào thị trường"** = `net`, kèm dòng phụ
+  "Đã nộp X · đã rút Y". Thẻ này **không mang năm** trong nhãn, vì nó cộng dồn toàn
+  bộ lịch sử chứ không theo năm đang chọn.
+- Dưới form, khi đang ở loại Đầu tư, hiện dòng nhắc rằng khoản này không vào Thu/Chi.
+
+**Màn Giao dịch**
+
+- Thẻ **"Vốn thực có"** đặt ngay cạnh thẻ hero "Tổng lãi/lỗ đã thực hiện".
+- Giá trị `net`, **định dạng đồng đầy đủ kèm ₫**: `1.100.000.000 ₫`. Không rút gọn
+  ra "tr" (CLAUDE.md).
+- Dòng phụ: "Đã nộp X · đã rút Y".
+- Chưa có khoản đầu tư nào ⇒ hiện `—` + gợi ý nhập ở màn Tài chính cá nhân.
+  **Phân biệt** với đọc lỗi endpoint: cũng `—` nhưng dòng phụ nói "Chưa đọc được".
+- Viền trái `--accent` để đọc ra ngay: số này **không thuộc engine nào**, nó là tiền
+  user tự khai, không phải kết quả tính từ lệnh mua/bán.
+
+### 14.7 `fin/invested` đọc RIÊNG, không gộp vào `Promise.all`
+
+Cả hai màn gọi `getInvested()` bằng một promise độc lập và bỏ qua lỗi. Gộp vào
+`Promise.all` cùng các endpoint khác thì endpoint mới trả 404 (backend chưa áp patch)
+sẽ làm **cả màn** không tải được. Đọc riêng thì mất một thẻ, phần còn lại chạy bình
+thường.
+
+### 14.8 Không migrate
+
+Bản ghi `in`/`out` cũ **giữ nguyên**. `CATS['out']` trước đây có một danh mục chi tên
+`'Đầu tư'` — nay **đã bỏ**, nên không nhập mới được nữa. Bản ghi cũ mang danh mục đó
+**vẫn tính là chi**: `summary()` không đối chiếu `cat` với `CATS`, nó chỉ cộng theo
+`entry_type`. Bỏ khỏi hằng số chặn đường vào, không đụng dữ liệu đã có.
+
+| | `entry_type` | Nhập mới được? | Vào Chi tháng/năm? | Vào vốn ròng? |
+|---|---|---|---|---|
+| Danh mục chi cũ `'Đầu tư'` | `out` | **không** | **CÓ** (bản ghi cũ) | không |
+| Loại mới Nộp vào | `inv_in` | có | không | **CÓ** |
+
+Vì thế UI **không** dùng chữ "Đầu tư" làm nhãn trong sổ giao dịch — nhãn là "Nộp vào
+TK" / "Rút khỏi TK". Hai thứ khác nhau thì phải khác tên, không thì sổ đọc ra hai
+dòng giống nhau mà một dòng vào báo cáo chi, một dòng không.
+
+Tại thời điểm áp patch, DB **không có bản ghi nào** mang `cat = 'Đầu tư'` (đã đếm:
+0). Hành vi "bản ghi cũ vẫn là chi" vẫn được kiểm bằng cách dựng một bản ghi giả rồi
+xoá đi — nó cộng đúng vào `outYear` và hiện đúng trong `catTotals`.

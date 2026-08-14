@@ -21,9 +21,16 @@
   cursor: pointer;
 }
 
+/*
+  6 thẻ từ khi thêm "Vốn đã bỏ vào thị trường".
+  Ngưỡng 190px chọn theo bề rộng THỰC của số: 13 chữ số + dấu chấm ở IBM Plex Mono
+  18px ≈ 140px, cộng padding 2×18 = 176px. Hẹp hơn thì số tràn ra ngoài thẻ.
+  Màn vừa (~1176px vùng nội dung) sẽ thành 5 + 1: năm thẻ theo kỳ ở hàng trên đúng
+  như thiết kế gốc, thẻ vốn xuống hàng riêng — nó vốn là khái niệm khác.
+*/
 .gf-fin-stats {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 14px;
 }
 
@@ -55,6 +62,26 @@
   font-size: 22px;
   font-weight: 700;
   margin-top: 6px;
+}
+
+/*
+  Thẻ vốn: viền trái accent để đọc ra ngay đây KHÔNG phải một thẻ thu/chi. Nó cộng
+  dồn toàn bộ lịch sử, không theo năm đang chọn như bốn thẻ bên cạnh.
+*/
+.gf-fin-stat-inv {
+  border-left: 3px solid var(--accent);
+}
+
+.gf-fin-stat-inv .gf-fin-stat-value {
+  font-size: 18px;
+}
+
+.gf-fin-stat-sub {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 5px;
+  line-height: 1.45;
 }
 
 .gf-finance-charts {
@@ -185,12 +212,22 @@
 
 .gf-fin-form-grid {
   display: grid;
-  grid-template-columns: 150px 1fr 1fr 1.4fr 1fr auto;
+  /* Cột Loại 210px chứ không 150px như hồi chỉ có hai nút: ba nút trong 150px thì
+     mỗi nút còn 45px và chữ "Đầu tư" xuống dòng, đẩy cả hàng cao thêm 20px. */
+  grid-template-columns: 210px 1fr 1fr 1.4fr 1fr auto;
   gap: 10px;
   align-items: end;
   margin-top: 14px;
   /* chỗ cho .gf-fin-amount-hint đặt absolute bên dưới ô Số tiền */
   padding-bottom: 18px;
+}
+
+/*
+  Loại Đầu tư: vẫn 6 ô như thu/chi, chỉ đổi vai — ô "Loại thu/chi" biến mất, ô
+  "Chiều" (Nộp/Rút) thay vào. Cần rộng hơn 1fr vì chứa hai nút chữ.
+*/
+.gf-fin-form-grid.is-inv {
+  grid-template-columns: 210px 180px 1fr 1fr 1.6fr auto;
 }
 
 .gf-fin-form-label {
@@ -212,7 +249,9 @@
 .gf-fin-type-btn {
   flex: 1;
   text-align: center;
-  padding: 10px;
+  /* nowrap: nhãn xuống dòng làm cả hàng form cao lệch so với các ô bên cạnh */
+  white-space: nowrap;
+  padding: 10px 6px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 700;
@@ -233,6 +272,29 @@
   background: var(--down);
   color: #fff;
   font-weight: 800;
+}
+
+/* Đầu tư: accent, KHÁC hẳn xanh của Thu và đỏ của Chi — không phải lãi, không phải lỗ. */
+.gf-fin-type-btn.is-active-inv {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+}
+
+/* Dòng nhắc "khoản đầu tư không vào Thu/Chi" dưới form. */
+.gf-fin-form-note {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--accentSoft);
+  color: var(--accentInk);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+/* Dòng đầu tư trong sổ: nền accent nhạt để lướt mắt là thấy nó tách khỏi thu/chi. */
+.gf-fin-table tr.gf-fin-tr-inv td {
+  background: var(--accentSoft);
 }
 
 .gf-fin-input,
