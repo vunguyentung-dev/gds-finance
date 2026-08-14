@@ -240,3 +240,10 @@ KHÔNG làm ĐỔI SỐ của endpoint fin/entries, fin/summary, và engine A/B
 (đã verify 119 OK) — nếu số nào của chúng đổi thì đó là lỗi.
 Được sửa class-fin-personal.php cho việc chuẩn hoá múi giờ về GMT+7
 (đã làm xong, đã chứng minh số không đổi byte-for-byte).
+
+## Nới phạm vi tạm thời — chỉ để áp patch đầu tư tài chính
+Được sửa backend/ CHỈ để áp docs/patch-dau-tu.md, trên nhánh riêng.
+Thứ tự bắt buộc: sửa class-fin-personal.php TRƯỚC, nâng version SAU.
+Sau khi áp: chạy SHOW COLUMNS xác nhận varchar(10), kiểm gdsfin_db_version = 1.9.0,
+in bảng đối chiếu kỳ vọng vs thực tế trên bảng THẬT.
+KHÔNG được làm đổi số fin/summary với dữ liệu cũ (10 bản ghi hiện có).
