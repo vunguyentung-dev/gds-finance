@@ -248,3 +248,9 @@ Thứ tự bắt buộc: sửa class-fin-personal.php TRƯỚC, nâng version SA
 Sau khi áp: chạy SHOW COLUMNS xác nhận varchar(10), kiểm gdsfin_db_version = 1.9.0,
 in bảng đối chiếu kỳ vọng vs thực tế trên bảng THẬT.
 KHÔNG được làm đổi số fin/summary với dữ liệu cũ (10 bản ghi hiện có).
+
+## Môi trường production
+- Domain: https://stoic-cohen.113-52-35-14.plesk.page
+- Hosting: Plesk 18, PHP 8.3, MariaDB, KHÔNG có SSH
+- Prefix bảng: ypNAa0LE_ (khác local là wp_)
+- Deploy: ./infra/release.sh trên Mac → Plesk → Git → Pull now → mở trang 1 lần cho dbDelta chạy
