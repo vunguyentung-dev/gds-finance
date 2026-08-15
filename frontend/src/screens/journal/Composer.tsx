@@ -1,5 +1,7 @@
 import type { Flag, Mood } from '../../api/journal';
 import { flags, moods } from './constants';
+import { ImageAttach } from './ImageAttach';
+import { filesFromClipboard, pickImages } from './imageRules';
 
 export interface JournalDraft {
   mood: Mood;
@@ -16,6 +18,9 @@ interface Props {
   onFlagChange: (flag: Flag) => void;
   onFieldChange: (key: 'vnindex' | 'body', value: string) => void;
   onSubmit: () => void;
+  /** Ảnh đang chờ gửi, chưa lên máy chủ. */
+  images: File[];
+  onImagesChange: (files: File[]) => void;
 }
 
 export function Composer({
@@ -26,7 +31,22 @@ export function Composer({
   onFlagChange,
   onFieldChange,
   onSubmit,
+  images,
+  onImagesChange,
 }: Props) {
+  /**
+   * Dán ảnh ngay trong ô ghi chú — đây là đường vào chính, vì người dùng chụp màn
+   * hình biểu đồ rồi Cmd+V thẳng vào chỗ đang gõ chứ không bấm vào vùng đính kèm.
+   * Chỉ chặn sự kiện khi clipboard THỰC SỰ có ảnh, để dán chữ vẫn bình thường.
+   */
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const found = filesFromClipboard(e.clipboardData?.items ?? null);
+    if (found.length === 0) return;
+    e.preventDefault();
+    const { accepted } = pickImages(found, images.length);
+    if (accepted.length) onImagesChange([...images, ...accepted]);
+  };
+
   return (
     <div className="gf-jn-panel">
       <div className="gf-jn-title">Ghi nhận cảm nhận hôm nay</div>
@@ -85,7 +105,10 @@ export function Composer({
         placeholder="Hôm nay thị trường…"
         value={draft.body}
         onChange={(e) => onFieldChange('body', e.target.value)}
+        onPaste={onPaste}
       />
+
+      <ImageAttach files={images} onChange={onImagesChange} disabled={submitting} />
 
       <button type="button" className="gf-jn-save" onClick={onSubmit} disabled={submitting}>
         Lưu nhật ký

@@ -12,7 +12,9 @@ import {
 } from '../../api/journal';
 import { parseVNNumber } from '../../lib/format';
 import { Composer, type JournalDraft } from './Composer';
+import { deleteImage, uploadImage } from '../../api/journalImages';
 import { JournalFilters } from './JournalFilters';
+import { Lightbox } from './Lightbox';
 import { ALL_FILTER, isFiltering } from './filterState';
 import { JournalList } from './JournalList';
 import { Pagination } from './Pagination';
@@ -60,6 +62,11 @@ export function JournalScreen() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+
+  /** Ảnh đính kèm ghi chép đang soạn, chưa gửi lên máy chủ. */
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
+  /** Ảnh đang mở toàn màn hình, null = đóng. */
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
 
   /** Đầu danh sách, để cuộn về sau khi đổi trang. */
   const listRef = useRef<HTMLDivElement>(null);
@@ -179,14 +186,36 @@ export function JournalScreen() {
     setSubmitting(true);
     setFormError('');
     try {
-      await createJournal({
+      const created = await createJournal({
         mood: draft.mood,
         flag: draft.flag,
         // Để trống thì gửi null, không gửi 0 — cột vnindex là nullable
         vnindex: vn === '' ? null : String(parseVNNumber(vn)),
         body,
       });
+
+      /*
+       * Ảnh gửi SAU khi ghi chép đã tạo, vì trước đó chưa có id để gắn vào.
+       * Gửi tuần tự chứ không song song: mỗi ảnh tới 5MB, bắn 5 lượt cùng lúc dễ
+       * chạm post_max_size hoặc giới hạn kết nối, mà lỗi lúc đó rất khó đọc.
+       *
+       * Ghi chép ĐÃ tồn tại rồi, nên ảnh hỏng thì báo riêng phần ảnh — tuyệt đối
+       * không nuốt lỗi, cũng không được để người dùng tưởng cả ghi chép mất.
+       */
+      const failed: string[] = [];
+      for (const f of pendingImages) {
+        try {
+          await uploadImage(created.id, f);
+        } catch (err) {
+          failed.push(`${f.name || 'ảnh dán vào'}: ${errorMessageOf(err)}`);
+        }
+      }
+
       setDraft((d) => ({ ...d, vnindex: '', body: '' }));
+      setPendingImages([]);
+      if (failed.length) {
+        setFormError(`Đã lưu ghi chép, nhưng ${failed.length} ảnh không gửi được — ${failed.join('; ')}`);
+      }
       // Ghi chép mới luôn nằm ĐẦU danh sách, nên nhảy về trang 1 để người dùng thấy
       // ngay thứ vừa viết. Đứng lại trang 5 thì bấm Lưu xong màn hình không đổi gì.
       await refresh(true);
@@ -194,6 +223,17 @@ export function JournalScreen() {
       setFormError(errorMessageOf(err));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteImage = async (id: string) => {
+    setFormError('');
+    try {
+      await deleteImage(id);
+      if (lightboxId === id) setLightboxId(null);
+      await refresh();
+    } catch (err) {
+      setFormError(errorMessageOf(err));
     }
   };
 
@@ -252,6 +292,8 @@ export function JournalScreen() {
         onFlagChange={(flag: Flag) => setDraft((d) => ({ ...d, flag }))}
         onFieldChange={(key, value) => setDraft((d) => ({ ...d, [key]: value }))}
         onSubmit={handleSubmit}
+        images={pendingImages}
+        onImagesChange={setPendingImages}
       />
 
       <div className="gf-jn-listhead">
@@ -274,6 +316,8 @@ export function JournalScreen() {
           onVoid={handleVoid}
           filtering={isFiltering(filter)}
           onClearFilter={() => applyFilter(ALL_FILTER)}
+          onOpenImage={setLightboxId}
+          onDeleteImage={handleDeleteImage}
         />
       </div>
 
@@ -286,6 +330,8 @@ export function JournalScreen() {
         error={pageError}
         onGoTo={handleGoTo}
       />
+
+      <Lightbox id={lightboxId} onClose={() => setLightboxId(null)} />
     </div>
   );
 }

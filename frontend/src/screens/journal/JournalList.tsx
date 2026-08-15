@@ -1,6 +1,7 @@
 import type { JournalEntry } from '../../api/journal';
 import { formatDateTimeVN, formatVnIndex } from '../../lib/format';
 import { flagOf, moodOf } from './constants';
+import { JournalImages } from './JournalImages';
 
 interface Props {
   entries: JournalEntry[];
@@ -8,9 +9,18 @@ interface Props {
   /** Có ít nhất một bộ lọc đang bật. */
   filtering: boolean;
   onClearFilter: () => void;
+  onOpenImage: (id: string) => void;
+  onDeleteImage: (id: string) => void;
 }
 
-export function JournalList({ entries, onVoid, filtering, onClearFilter }: Props) {
+export function JournalList({
+  entries,
+  onVoid,
+  filtering,
+  onClearFilter,
+  onOpenImage,
+  onDeleteImage,
+}: Props) {
   if (entries.length === 0) {
     // Hai lý do rỗng khác hẳn nhau: chưa ghi gì bao giờ, và lọc quá hẹp. Gộp làm
     // một câu thì người vừa lọc sẽ tưởng mất sạch dữ liệu.
@@ -61,6 +71,11 @@ export function JournalList({ entries, onVoid, filtering, onClearFilter }: Props
               </span>
             </div>
             <div className="gf-jn-body">{e.body}</div>
+            <JournalImages
+              images={e.images ?? []}
+              onOpen={onOpenImage}
+              onDelete={onDeleteImage}
+            />
           </div>
         );
       })}
