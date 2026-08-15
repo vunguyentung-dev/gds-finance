@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { JournalImage } from './journalImages';
 
 export type Mood = 'greed' | 'up' | 'neutral' | 'down' | 'fear';
 export type Flag = 'none' | 'warn' | 'lesson' | 'chance' | 'note';
@@ -12,6 +13,8 @@ export interface JournalEntry {
   body: string;
   /** DATETIME 'Y-m-d H:i:s' do backend đóng dấu. */
   noted_at: string;
+  /** Ghi chép cũ (trước khi có tính năng ảnh) không có khoá này. */
+  images?: JournalImage[];
 }
 
 export interface CreateJournalPayload {

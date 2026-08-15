@@ -74,6 +74,16 @@ App chạy TOÀN MÀN HÌNH, không nằm trong khung nội dung của theme Wor
 - GET    fin/invested          -> {in, out, net} vốn nộp/rút TK chứng khoán,
                                CỘNG DỒN TOÀN BỘ lịch sử, không nhận year/month
 
+## Ảnh nhật ký — xem docs/patch-anh-nhat-ky.md
+Ảnh phục vụ qua REST nên <img src> PHẢI kèm ?_wpnonce=... trong query string:
+không có nonce thì rest_cookie_check_errors gọi wp_set_current_user(0) và trả 401.
+Header X-WP-Nonce không dùng được vì thẻ <img> không gửi header.
+Hệ quả: nonce hết hạn 12-24h thì ảnh đứt, tải lại trang là hết.
+Kiểu file xác định bằng NỘI DUNG (getimagesize + finfo), KHÔNG tin đuôi hay
+Content-Type client gửi. Tên file ngẫu nhiên, không dùng tên gốc.
+Production chạy nginx nên .htaccess VÔ TÁC DỤNG — chặn thư mục bằng
+Additional nginx directives trong Plesk.
+
 ## Đầu tư tài chính — xem api-spec mục 14
 entry_type 'inv_in'/'inv_out' là CHUYỂN TIỀN giữa hai túi của chính user, KHÔNG phải
 thu/chi. Chúng KHÔNG vào Thu/Chi tháng, Thu/Chi năm, biểu đồ 12 tháng, chi tiêu theo
@@ -136,6 +146,10 @@ Nhật ký thị trường:
          KHÔNG có bản ghi nào -> X-WP-TotalPages = 0, không phải 1
          gọi không tham số giờ trả 20 dòng (trước đây tối đa 1000)
 - GET    fin/journal/years    -> {years:[...], months:{"2026":[8,7],...}}
+- POST   fin/journal/{id}/images        multipart, field 'file' — 1 ảnh/lượt
+- GET    fin/journal/images/{id}[?size=thumb]  chỉ CHỦ SỞ HỮU xem được, khác -> 403
+- DELETE fin/journal/images/{id}
+         fin/journal trả kèm images:[{id,mime,size_bytes}] cho từng ghi chép
 - POST   fin/journal          body {mood, flag, vnindex|null, body}   (noted_at do backend đóng dấu)
 - DELETE fin/journal/{id}     -> {voided:1}
 
