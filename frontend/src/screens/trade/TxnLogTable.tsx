@@ -1,13 +1,30 @@
+import { useMemo, useState } from 'react';
 import type { StockTxn } from '../../api/stock';
 import { formatDateVN, toDong, toQty } from '../../lib/format';
+import { SortHeader } from './SortHeader';
+import { TXN_VALUE, nextSort, sortRows, type SortState } from './sortRows';
 
 interface Props {
   rows: StockTxn[];
   onVoid: (id: string) => void;
 }
 
-/** Bảng "Lịch sử giao dịch" — net_price/net_value do backend tính sẵn. */
+/**
+ * Bảng "Lịch sử giao dịch" — net_price/net_value do backend tính sẵn.
+ *
+ * Bảng này sắp xếp thoải mái: mọi cột đều là thuộc tính RIÊNG của từng lệnh, không
+ * có số cộng dồn nào. Khác hẳn bảng T+2, nơi Lũy kế và Còn nắm phụ thuộc thứ tự.
+ */
 export function TxnLogTable({ rows, onVoid }: Props) {
+  const [sort, setSort] = useState<SortState | null>(null);
+
+  const shown = useMemo(
+    () => (sort === null ? rows : sortRows(rows, sort, TXN_VALUE[sort.key])),
+    [rows, sort],
+  );
+
+  const handleSort = (key: string) => setSort((cur) => nextSort(cur, key));
+
   return (
     <div className="gf-trade-table-wrap">
       <div className="gf-trade-table-head">
@@ -19,18 +36,18 @@ export function TxnLogTable({ rows, onVoid }: Props) {
         <table className="gf-trade-table gf-num">
           <thead>
             <tr>
-              <th className="l">Ngày</th>
-              <th className="l">Mã</th>
-              <th className="l">Loại</th>
-              <th>KL</th>
-              <th>Giá</th>
+              <SortHeader label="Ngày" sortKey="date" sort={sort} onSort={handleSort} align="l" />
+              <SortHeader label="Mã" sortKey="sym" sort={sort} onSort={handleSort} align="l" />
+              <SortHeader label="Loại" sortKey="type" sort={sort} onSort={handleSort} align="l" />
+              <SortHeader label="KL" sortKey="qty" sort={sort} onSort={handleSort} />
+              <SortHeader label="Giá" sortKey="price" sort={sort} onSort={handleSort} />
               <th>Giá sau phí/thuế</th>
               <th>Giá trị ròng</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {rows.map((t) => {
+            {shown.map((t) => {
               const isBuy = t.txn_type === 'buy';
               return (
                 <tr key={t.id}>

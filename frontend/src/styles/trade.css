@@ -389,6 +389,69 @@
   color: var(--muted);
 }
 
+/* ---------- sắp xếp bảng ---------- */
+
+/*
+  Nút thật bên trong <th> để tab tới được bằng bàn phím. Nó phải trông y hệt tiêu đề
+  cũ khi chưa bấm: thừa hưởng font/màu/căn lề từ thead, không tự vẽ nền hay viền.
+*/
+.gf-sort-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.gf-sort-btn.l {
+  justify-content: flex-start;
+}
+
+.gf-sort-btn:hover {
+  color: var(--fg);
+}
+
+.gf-sort-btn.on {
+  color: var(--accentInk);
+}
+
+/* Mũi tên ↕ của cột chưa sắp để mờ: đủ để biết bấm được, không đủ để gây nhiễu. */
+.gf-sort-arrow {
+  font-size: 9px;
+  opacity: 0.35;
+  line-height: 1;
+}
+
+.gf-sort-arrow.on {
+  opacity: 1;
+}
+
+/*
+  Cảnh báo ẩn cột cộng dồn. Dùng accentSoft chứ không phải downSoft như khối
+  engines_diverge: kia là hai cách tính lệch nhau, chỗ này chỉ là hệ quả bình thường
+  của việc đổi thứ tự — không có gì sai để báo đỏ.
+*/
+.gf-trade-sortwarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 18px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accentSoft);
+  color: var(--accentInk);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .gf-trade-empty {
   padding: 16px 18px 18px;
   font-size: 12px;
