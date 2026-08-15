@@ -283,6 +283,14 @@ Chỉ đụng class-fin-journal.php (index + years) + hằng GDSFIN_VERSION.
 KHÔNG nâng GDSFIN_DB_VERSION — cột mood đã có sẵn, không thêm cột hay chỉ mục.
 Đã áp xong, verify 52 OK · 0 LỆCH trên class thật với dữ liệu test đã dọn.
 
+## Nới phạm vi tạm thời — chỉ để áp patch ảnh nhật ký
+Được sửa backend/ CHỈ để áp docs/patch-anh-nhat-ky.md, trên nhánh riêng.
+File mới class-fin-journal-images.php + sửa class-fin-journal.php (index, destroy)
++ gds-finance.php (require, create_tables, register_routes, 2 hằng version).
+CÓ nâng GDSFIN_DB_VERSION lên 1.10.0 — thêm bảng fin_journal_images.
+Đã áp xong, verify 44 OK · 0 LỆCH trên class thật, dữ liệu và file test đã dọn.
+CÒN LẠI trên Plesk: nginx directive chặn thư mục + nâng upload_max_filesize.
+
 ## Môi trường production
 - Domain: https://stoic-cohen.113-52-35-14.plesk.page
 - Hosting: Plesk 18, PHP 8.3, MariaDB, KHÔNG có SSH

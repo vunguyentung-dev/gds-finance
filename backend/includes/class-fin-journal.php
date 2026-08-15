@@ -105,6 +105,10 @@ class GDSFIN_Journal {
             ...array_merge($args, [$per, ($page - 1) * $per])
         ), ARRAY_A) ?: [];
 
+        // Lấy ảnh của CẢ TRANG trong một truy vấn. Truy vấn từng ghi chép thì
+        // trang 20 bài thành 21 truy vấn.
+        $imgs = GDSFIN_Journal_Images::for_journals(array_column($rows, 'id'), $uid);
+
         $data = array_map(fn($r) => [
             'id'       => (string) $r['id'],
             'mood'     => $r['mood'],
@@ -112,6 +116,7 @@ class GDSFIN_Journal {
             'vnindex'  => $r['vnindex'],
             'body'     => $r['body'],
             'noted_at' => $r['noted_at'],
+            'images'   => $imgs[(string) $r['id']] ?? [],
         ], $rows);
 
         // Header chuẩn WordPress, giống cách wp/v2 trả về.
@@ -187,6 +192,12 @@ class GDSFIN_Journal {
             absint($req['id']), get_current_user_id()
         ));
         if (!$n) return new WP_Error('not_found', 'Không tìm thấy ghi chép', ['status' => 404]);
-        return rest_ensure_response(['voided' => (int) $n]);
+
+        // Ghi chép void mềm (giữ vết kiểm toán) nhưng ẢNH XOÁ HẲN cả DB lẫn đĩa:
+        // giữ file ảnh của một ghi chép không ai xem được nữa chỉ tổ phình đĩa, và
+        // ảnh mới là thứ có nguy cơ lộ dữ liệu nhạy cảm.
+        $imgs = GDSFIN_Journal_Images::delete_for_journal($id, $uid);
+
+        return rest_ensure_response(['voided' => (int) $n, 'images_deleted' => $imgs]);
     }
 }
