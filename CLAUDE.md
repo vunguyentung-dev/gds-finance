@@ -81,8 +81,13 @@ Header X-WP-Nonce không dùng được vì thẻ <img> không gửi header.
 Hệ quả: nonce hết hạn 12-24h thì ảnh đứt, tải lại trang là hết.
 Kiểu file xác định bằng NỘI DUNG (getimagesize + finfo), KHÔNG tin đuôi hay
 Content-Type client gửi. Tên file ngẫu nhiên, không dùng tên gốc.
-Production chạy nginx nên .htaccess VÔ TÁC DỤNG — chặn thư mục bằng
-Additional nginx directives trong Plesk.
+Production chạy nginx nên .htaccess VÔ TÁC DỤNG. Chặn thư mục ảnh bằng
+Additional nginx directives trong Plesk, và phải dùng `if` chứ KHÔNG dùng khối
+`location` — Plesk nhận ô nhưng không áp khối location, hỏng im lặng:
+  if ($request_uri ~* ^/wp-content/uploads/gdsfin-journal/) { return 404; }
+Đã đo trên production 2026-08-15: mọi đuôi ảnh trả 404. VIỆC NÀY XONG.
+Local chạy image wordpress:...-apache còn production là nginx — đừng thử .htaccess
+ở local rồi tưởng production cũng vậy.
 
 ## Đầu tư tài chính — xem api-spec mục 14
 entry_type 'inv_in'/'inv_out' là CHUYỂN TIỀN giữa hai túi của chính user, KHÔNG phải

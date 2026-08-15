@@ -3,8 +3,10 @@
 > **PHẦN MÃ ĐÃ ÁP XONG** ngày 2026-08-15, nhánh `feature/ap-anh-nhat-ky-20260815`.
 > Verify trên class thật: 44 OK · 0 LỆCH. `GDSFIN_VERSION` 1.15.0,
 > `GDSFIN_DB_VERSION` 1.10.0, bảng `fin_journal_images` đã tạo.
-> **CHƯA LÀM: hai việc cấu hình Plesk ở mục 1 và mục 2.** Chưa làm thì trên
-> production ảnh trên 2MB sẽ hỏng và thư mục ảnh chưa được chặn.
+> **Hai việc cấu hình Plesk ở mục 1 và 2 ĐÃ LÀM XONG** (2026-08-15), đã đo lại trên
+> production: mọi đuôi ảnh dưới `uploads/gdsfin-journal/` trả 404, phần còn lại của
+> site không đổi. Mục 1 đã viết lại: khối `location` KHÔNG dùng được trên Plesk,
+> phải dùng `if`.
 
 Đây là patch lớn nhất từ trước tới nay: **1 file mới**, sửa **2 file**, và **2 việc
 cấu hình trên Plesk** mà không làm thì tính năng hỏng theo kiểu khó đoán.
@@ -43,31 +45,58 @@ Plesk → **Domains** → `stoic-cohen.113-52-35-14.plesk.page` → **Apache & n
 Settings** → ô **Additional nginx directives** → dán vào:
 
 ```nginx
-location ^~ /wp-content/uploads/gdsfin-journal/ {
-    return 404;
-}
+if ($request_uri ~* ^/wp-content/uploads/gdsfin-journal/) { return 404; }
 ```
 
 Bấm **OK / Apply**. Không cần SSH.
 
-Ba điểm về đoạn này:
+### KHÔNG dùng khối `location` — đã thử và không chạy
 
-- `^~` bắt nginx **dừng so khớp** ngay khi trúng tiền tố này, không để một
-  `location ~ \.(png|jpg)$` nào khác phía sau cướp mất và phục vụ file.
-- `return 404` chứ không `deny all` (403): 403 xác nhận "có thứ gì đó ở đây", 404
-  thì không tiết lộ gì. Ảnh có thể chứa số dư và danh mục thật.
-- Đặt trong **Additional nginx directives**, không phải "Additional Apache
-  directives" — Plesk có cả hai ô, dán nhầm ô là không có tác dụng.
+Bản đầu của patch này dùng `location ^~ /wp-content/uploads/gdsfin-journal/ { return 404; }`.
+Về mặt nginx thuần thì đúng: `^~` thắng mọi location regex. Nhưng trên Plesk nó
+**không có tác dụng**, và mất ba vòng mới tìm ra vì hỏng theo kiểu im lặng — Plesk
+nhận ô, không báo lỗi, mà khối `location` thì không vào cấu hình.
 
-### Kiểm sau khi áp
+Cách tách bạch: dán tạm `add_header X-GDSFIN-Test "ok" always;` vào **cùng ô** rồi
+xem header có xuất hiện không.
+
+| Quan sát | Kết luận |
+|---|---|
+| Có header, thư mục vẫn 200 | Ô có ăn — vấn đề ở khối `location` |
+| Không có header | Ô không được áp (sai ô, chưa Apply, hoặc lỗi cú pháp) |
+
+Ở đây header **có** xuất hiện trên mọi đường dẫn, kể cả file tĩnh trong chính thư
+mục ảnh, mà `location` vẫn không chặn. Hai điều đó chỉ cùng đúng được nếu Plesk xử
+lý riêng khối `location`. Nên chuyển sang `if` — cùng loại directive đơn với
+`add_header`, thứ đã chứng minh là chạy được.
+
+`return` bên trong `if` là một trong hai cách dùng `if` được nginx khuyến nghị,
+không rơi vào các trường hợp `if` gây lỗi khó lường.
+
+### Vì sao `if` chặn được cả file có thật
+
+`return 404` trong `if` ở cấp server chạy ở **rewrite phase** — trước bước nginx tra
+file trên đĩa. Nên nó chặn vô điều kiện, không phụ thuộc file tồn tại hay không.
+
+Đó là điều khiến phép thử bằng một tên file bịa cũng đủ kết luận: `abc.png` không hề
+tồn tại, trước khi áp thì trả 301 (rơi xuống WordPress), sau khi áp trả 404. Chỉ có
+`if` giải thích được thay đổi đó, và vì nó vô điều kiện nên ảnh có thật cũng chặn y
+hệt.
+
+### Kết quả đo trên production (2026-08-15)
 
 ```
-curl -sI https://<domain>/wp-content/uploads/gdsfin-journal/ | head -1
+uploads/gdsfin-journal/1/abc.png      404      (mọi đuôi .png .jpg .jpeg .gif .webp)
+uploads/gdsfin-journal/               404
+uploads/gdsfin-journal/1/  2/  99/    404
+/  ·  app.js  ·  uploads/             không đổi — 200 / 200 / 403
 ```
 
-Phải ra `HTTP/… 404`. Ra `403` là nginx chặn theo cách khác (vẫn ổn nhưng lộ sự tồn
-tại). Ra `200` hoặc danh sách thư mục thì **directive chưa ăn — dừng lại, đừng
-upload ảnh thật**.
+Còn một ngoại lệ vô hại: `uploads/gdsfin-journal/<uid>/index.php` vẫn trả 200, vì
+`.php` đi qua location khác nên thoát khỏi `if`. Nội dung nó là 28 byte chú thích do
+chính mã sinh ra. Đáng chú ý là nó được trả về dạng `application/octet-stream` chứ
+không chạy qua PHP — nghĩa là thư mục uploads **không thực thi PHP**, một lớp bảo vệ
+sẵn có.
 
 ### Vẫn giữ ba lớp nữa, không đặt cược vào một hàng rào
 
