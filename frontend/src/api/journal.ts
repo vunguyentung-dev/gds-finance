@@ -15,6 +15,8 @@ export interface JournalEntry {
   noted_at: string;
   /** Ghi chép cũ (trước khi có tính năng ảnh) không có khoá này. */
   images?: JournalImage[];
+  /** null = CHƯA TỪNG sửa. Khoá vắng mặt với backend chưa áp patch sửa bài. */
+  updated_at?: string | null;
 }
 
 export interface CreateJournalPayload {
@@ -65,6 +67,11 @@ export function getJournal(filter: JournalFilter, page = 1, perPage = JOURNAL_PE
 
 export function getJournalYears() {
   return apiClient.get<JournalYears>('fin/journal/years');
+}
+
+/** noted_at KHÔNG có trong payload — dấu thời gian gốc không sửa được. */
+export function updateJournal(id: string, payload: CreateJournalPayload) {
+  return apiClient.put<{ id: string; updated_at: string }>(`fin/journal/${id}`, payload);
 }
 
 export function createJournal(payload: CreateJournalPayload) {

@@ -1,5 +1,5 @@
 import type { Flag, Mood } from '../../api/journal';
-import { flags, moods } from './constants';
+import { FlagPicker, MoodPicker } from './ChipPickers';
 import { ImageAttach } from './ImageAttach';
 import { filesFromClipboard, pickImages } from './imageRules';
 
@@ -53,42 +53,10 @@ export function Composer({
       <div className="gf-jn-sub">Lưu lại tâm lý &amp; nhận định để soi lại quyết định về sau.</div>
 
       <label className="gf-jn-label">Cảm nhận thị trường</label>
-      <div className="gf-jn-moods">
-        {moods.map((m) => {
-          const on = draft.mood === m.id;
-          return (
-            <button
-              key={m.id}
-              type="button"
-              className={`gf-jn-mood${on ? ' is-on' : ''}`}
-              style={on ? { background: m.color } : undefined}
-              onClick={() => onMoodChange(m.id)}
-            >
-              <span className="gf-jn-mood-icon">{m.icon}</span>
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
+      <MoodPicker value={draft.mood} onChange={onMoodChange} />
 
       <label className="gf-jn-label">Gắn cờ</label>
-      <div className="gf-jn-flags">
-        {flags.map((f) => {
-          const on = draft.flag === f.id;
-          return (
-            <button
-              key={f.id}
-              type="button"
-              className={`gf-jn-flag${on ? ' is-on' : ''}`}
-              style={on ? { background: f.color } : undefined}
-              onClick={() => onFlagChange(f.id)}
-            >
-              <span>{f.icon}</span>
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
+      <FlagPicker value={draft.flag} onChange={onFlagChange} />
 
       <label className="gf-jn-label">VN-Index (tùy chọn)</label>
       <input
