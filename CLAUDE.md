@@ -263,6 +263,12 @@ Chỉ đụng class-fin-journal.php (hàm index) + hằng GDSFIN_VERSION.
 KHÔNG nâng GDSFIN_DB_VERSION — patch này không đổi cấu trúc bảng nào.
 Đã áp xong, verify 46 OK · 0 LỆCH trên bảng thật với 137 ghi chép test đã dọn.
 
+## Nới phạm vi tạm thời — chỉ để áp patch bộ lọc nhật ký
+Được sửa backend/ CHỈ để áp docs/patch-boloc-nhat-ky.md, trên nhánh riêng.
+Chỉ đụng class-fin-journal.php (index + years) + hằng GDSFIN_VERSION.
+KHÔNG nâng GDSFIN_DB_VERSION — cột mood đã có sẵn, không thêm cột hay chỉ mục.
+Đã áp xong, verify 52 OK · 0 LỆCH trên class thật với dữ liệu test đã dọn.
+
 ## Môi trường production
 - Domain: https://stoic-cohen.113-52-35-14.plesk.page
 - Hosting: Plesk 18, PHP 8.3, MariaDB, KHÔNG có SSH
