@@ -46,28 +46,62 @@ class GDSFIN_Journal {
         ]);
     }
 
+    /** Số bản ghi mỗi trang khi client không nói gì, và trần cứng. */
+    const PER_PAGE_DEFAULT = 20;
+    const PER_PAGE_MAX     = 50;
+
     public static function index(WP_REST_Request $req) {
         global $wpdb;
         $uid = get_current_user_id();
         $t   = self::table();
 
-        $sql    = "SELECT id, mood, flag, vnindex, body, noted_at FROM $t WHERE user_id = %d AND status = 'posted'";
-        $args   = [$uid];
-        if ($y = absint($req->get_param('year')))  { $sql .= " AND YEAR(noted_at) = %d";  $args[] = $y; }
-        if ($m = absint($req->get_param('month'))) { $sql .= " AND MONTH(noted_at) = %d"; $args[] = $m; }
+        // Bộ lọc dựng MỘT LẦN, dùng cho cả đếm lẫn lấy dữ liệu. Viết hai câu riêng rồi
+        // sửa một bên quên bên kia là lỗi kinh điển: X-WP-Total báo 137 trong khi bộ
+        // lọc chỉ có 12 dòng, client tưởng còn trang nên bấm mãi vào khoảng không.
+        $where = "WHERE user_id = %d AND status = 'posted'";
+        $args  = [$uid];
+        if ($y = absint($req->get_param('year')))  { $where .= " AND YEAR(noted_at) = %d";  $args[] = $y; }
+        if ($m = absint($req->get_param('month'))) { $where .= " AND MONTH(noted_at) = %d"; $args[] = $m; }
         $flag = (string) $req->get_param('flag');
-        if ($flag !== '' && in_array($flag, self::FLAGS, true)) { $sql .= " AND flag = %s"; $args[] = $flag; }
-        $sql .= " ORDER BY noted_at DESC, id DESC LIMIT 1000";
+        if ($flag !== '' && in_array($flag, self::FLAGS, true)) { $where .= " AND flag = %s"; $args[] = $flag; }
 
-        $rows = $wpdb->get_results($wpdb->prepare($sql, ...$args), ARRAY_A) ?: [];
-        return rest_ensure_response(array_map(fn($r) => [
+        // (int) chứ KHÔNG phải absint(): absint() lấy TRỊ TUYỆT ĐỐI, nên page=-5 sẽ
+        // thành trang 5 và per_page=-3 thành 3 dòng — âm thầm sai chứ không báo lỗi.
+        // (int) cho -5 -> -5, 'abc' -> 0, '2.9' -> 2; tất cả rơi đúng vào nhánh dưới.
+        $page = (int) $req->get_param('page');
+        if ($page < 1) $page = 1;
+
+        $per = $req->get_param('per_page');
+        $per = ($per === null || $per === '') ? self::PER_PAGE_DEFAULT : (int) $per;
+        if ($per < 1)                  $per = self::PER_PAGE_DEFAULT;
+        if ($per > self::PER_PAGE_MAX) $per = self::PER_PAGE_MAX;
+
+        $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t $where", ...$args));
+        $pages = $total > 0 ? (int) ceil($total / $per) : 0;
+
+        // LIMIT/OFFSET đi qua prepare() với %d, không nối chuỗi — đừng tạo tiền lệ.
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, mood, flag, vnindex, body, noted_at
+               FROM $t $where
+              ORDER BY noted_at DESC, id DESC
+              LIMIT %d OFFSET %d",
+            ...array_merge($args, [$per, ($page - 1) * $per])
+        ), ARRAY_A) ?: [];
+
+        $data = array_map(fn($r) => [
             'id'       => (string) $r['id'],
             'mood'     => $r['mood'],
             'flag'     => $r['flag'],
             'vnindex'  => $r['vnindex'],
             'body'     => $r['body'],
             'noted_at' => $r['noted_at'],
-        ], $rows));
+        ], $rows);
+
+        // Header chuẩn WordPress, giống cách wp/v2 trả về.
+        $res = rest_ensure_response($data);
+        $res->header('X-WP-Total', (string) $total);
+        $res->header('X-WP-TotalPages', (string) $pages);
+        return $res;
     }
 
     public static function years(WP_REST_Request $req) {
