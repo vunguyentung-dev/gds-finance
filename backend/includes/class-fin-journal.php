@@ -21,6 +21,7 @@ class GDSFIN_Journal {
             vnindex    DECIMAL(10,2)   NULL,
             body       TEXT            NOT NULL,
             noted_at   DATETIME        NOT NULL,
+            updated_at DATETIME        NULL,
             status     VARCHAR(15)     NOT NULL DEFAULT 'posted',
             created_at DATETIME        NOT NULL,
             PRIMARY KEY  (id),
@@ -42,7 +43,10 @@ class GDSFIN_Journal {
             'methods' => 'GET', 'callback' => [self::class, 'years'], 'permission_callback' => $view,
         ]);
         register_rest_route('fin/v1', '/fin/journal/(?P<id>\d+)', [
-            'methods' => 'DELETE', 'callback' => [self::class, 'destroy'], 'permission_callback' => $manage,
+            ['methods' => 'PUT',    'callback' => [self::class, 'update'],
+             'permission_callback' => $manage],
+            ['methods' => 'DELETE', 'callback' => [self::class, 'destroy'],
+             'permission_callback' => $manage],
         ]);
     }
 
@@ -98,7 +102,7 @@ class GDSFIN_Journal {
 
         // LIMIT/OFFSET đi qua prepare() với %d, không nối chuỗi — đừng tạo tiền lệ.
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, mood, flag, vnindex, body, noted_at
+            "SELECT id, mood, flag, vnindex, body, noted_at, updated_at
                FROM $t $where
               ORDER BY noted_at DESC, id DESC
               LIMIT %d OFFSET %d",
@@ -116,6 +120,7 @@ class GDSFIN_Journal {
             'vnindex'  => $r['vnindex'],
             'body'     => $r['body'],
             'noted_at' => $r['noted_at'],
+            'updated_at' => $r['updated_at'],
             'images'   => $imgs[(string) $r['id']] ?? [],
         ], $rows);
 
@@ -199,5 +204,62 @@ class GDSFIN_Journal {
         $imgs = GDSFIN_Journal_Images::delete_for_journal($id, $uid);
 
         return rest_ensure_response(['voided' => (int) $n, 'images_deleted' => $imgs]);
+    }
+    public static function update(WP_REST_Request $req) {
+        global $wpdb;
+        $uid = get_current_user_id();
+        $id  = absint($req['id']);
+        $t   = self::table();
+
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT user_id, status FROM $t WHERE id = %d", $id
+        ), ARRAY_A);
+
+        if (!$row) {
+            return new WP_Error('not_found', 'Không tìm thấy ghi chép', ['status' => 404]);
+        }
+        if ((int) $row['user_id'] !== $uid) {
+            return new WP_Error('forbidden', 'Ghi chép này không thuộc về bạn', ['status' => 403]);
+        }
+        // Đã bỏ ghi thì không sửa được. 409 chứ không 404: chính chủ biết nó tồn tại
+        // (họ vừa bỏ ghi nó), giấu đi chỉ làm khó hiểu.
+        if ($row['status'] !== 'posted') {
+            return new WP_Error('voided', 'Ghi chép đã bị bỏ ghi, không sửa được', ['status' => 409]);
+        }
+
+        // Kiểm tra y hệt store() — sửa mà lỏng hơn lúc tạo thì hàng rào vô nghĩa.
+        $b = (array) $req->get_json_params();
+
+        $mood = (string) ($b['mood'] ?? '');
+        if (!in_array($mood, self::MOODS, true)) {
+            return new WP_Error('bad_mood', 'mood không hợp lệ', ['status' => 400]);
+        }
+        $flag = (string) ($b['flag'] ?? 'none');
+        if (!in_array($flag, self::FLAGS, true)) $flag = 'none';
+
+        $body = trim((string) ($b['body'] ?? ''));
+        if ($body === '') {
+            return new WP_Error('bad_body', 'body không được rỗng', ['status' => 400]);
+        }
+        $vn = $b['vnindex'] ?? null;
+        $vn = ($vn === null || $vn === '') ? null : number_format((float) $vn, 2, '.', '');
+
+        $now = GDSFIN_Util::now_mysql();
+
+        /*
+         * noted_at và created_at KHÔNG có trong mảng này, và đó là điểm mấu chốt của
+         * cả tính năng. noted_at là dấu thời gian gốc của cảm nhận; sửa được nó thì
+         * ba tháng sau có thể viết lại lịch sử sau khi đã biết kết quả thị trường.
+         * Client có gửi noted_at lên cũng bị bỏ qua — không đọc tới nó.
+         */
+        $wpdb->update($t, [
+            'mood'       => $mood,
+            'flag'       => $flag,
+            'vnindex'    => $vn,
+            'body'       => wp_kses_post($body),
+            'updated_at' => $now,
+        ], ['id' => $id, 'user_id' => $uid]);
+
+        return rest_ensure_response(['id' => (string) $id, 'updated_at' => $now]);
     }
 }

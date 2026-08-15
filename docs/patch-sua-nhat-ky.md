@@ -1,5 +1,9 @@
 # Patch backend — sửa ghi chép nhật ký đã lưu
 
+> **ĐÃ ÁP XONG** ngày 2026-08-15, nhánh `feature/ap-sua-nhat-ky-20260815`.
+> Verify trên class thật: 31 OK · 0 LỆCH. `GDSFIN_VERSION` 1.16.0,
+> `GDSFIN_DB_VERSION` 1.11.0, cột `updated_at` đã thêm. Giữ file làm hồ sơ.
+
 Sửa **1 file**: `backend/includes/class-fin-journal.php`, cộng hai hằng version.
 
 ## 0. Tóm tắt

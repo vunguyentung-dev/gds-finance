@@ -301,6 +301,12 @@ CÓ nâng GDSFIN_DB_VERSION lên 1.10.0 — thêm bảng fin_journal_images.
 Đã áp xong, verify 44 OK · 0 LỆCH trên class thật, dữ liệu và file test đã dọn.
 CÒN LẠI trên Plesk: nginx directive chặn thư mục + nâng upload_max_filesize.
 
+## Nới phạm vi tạm thời — chỉ để áp patch sửa nhật ký
+Được sửa backend/ CHỈ để áp docs/patch-sua-nhat-ky.md, trên nhánh riêng.
+Chỉ đụng class-fin-journal.php (cột updated_at, route PUT, hàm update, index)
++ hai hằng version. CÓ nâng GDSFIN_DB_VERSION lên 1.11.0.
+Đã áp xong, verify 31 OK · 0 LỆCH trên class thật.
+
 ## Môi trường production
 - Domain: https://stoic-cohen.113-52-35-14.plesk.page
 - Hosting: Plesk 18, PHP 8.3, MariaDB, KHÔNG có SSH
