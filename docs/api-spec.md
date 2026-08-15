@@ -702,10 +702,26 @@ Không có bản ghi nào khớp thì `X-WP-TotalPages` là **0**, không phải
 Gọi không tham số giờ trả **20** dòng thay vì tối đa 1000 như bản đầu — đổi hành vi
 có chủ ý, không phải hồi quy.
 
-UI dùng nút **Tải thêm** chứ không phải thanh phân trang: ô soạn ghi chép nằm ngay
-trên danh sách nên mục mới chèn vào **đầu** liên tục, khiến "trang 2" theo offset đổi
-nghĩa sau mỗi lần ghi. Xoá/thêm giữa chừng thì client nạp lại **cả dải trang 1..N**
-đang bày, không phải chỉ trang 1.
+**UI dùng thanh số trang** — bấm thẳng vào trang muốn xem, theo yêu cầu của người
+dùng. (Bản đầu làm nút "Tải thêm" vì mục mới luôn chèn vào **đầu** danh sách nên
+"trang 2" theo offset đổi nghĩa sau mỗi lần ghi; người dùng đã cân nhắc và chọn số
+trang. Cái giá đó được bù bằng hai xử lý dưới đây.)
+
+Thanh chứa **tối đa 7 ô**: trang đầu, trang cuối, trang đang xem và mỗi bên một
+trang, phần lược bớt thay bằng `…`. Nhờ vậy 20 trang hay 500 trang thì thanh vẫn
+rộng như nhau, không tràn hàng làm nhảy chỗ. Tổng số trang ≤ 7 thì hiện **hết**,
+vì lược bớt lúc đó chỉ giấu mất chỗ bấm chứ không tiết kiệm được ô nào.
+
+Kèm ô **"Tới trang ___"**, chỉ hiện khi có trên 7 trang. Cần nó vì thanh gọn không
+chứa nổi mọi số: đang ở trang 1/20 thì trên thanh **không có** nút số 5, muốn tới
+phải bấm lần lượt 2, 3, 4, 5.
+
+Hai chỗ dịch chuyển phải xử lý:
+
+- **Ghi chép mới** rơi vào đầu danh sách ⇒ sau khi lưu, client nhảy về **trang 1**.
+  Đứng lại trang 5 thì bấm Lưu xong màn hình không đổi gì, người dùng tưởng hỏng.
+- **Xoá mục cuối của trang cuối** làm số trang giảm ⇒ trang đang đứng có thể vượt
+  quá tổng số trang mới. Client kẹp về trang cuối còn hợp lệ, không để lộ trang rỗng.
 
 ### Checklist mua/bán
 
