@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { JournalEntry } from '../../api/journal';
 import { formatDateTimeVN, formatVnIndex } from '../../lib/format';
 import { flagOf, moodOf } from './constants';
@@ -11,6 +12,10 @@ interface Props {
   onClearFilter: () => void;
   onOpenImage: (id: string) => void;
   onDeleteImage: (id: string) => void;
+  onStartEdit: (id: string) => void;
+  /** Ghi chép đang được sửa — thay thẻ thường bằng khung sửa. */
+  editingId: string | null;
+  renderEditor: (entry: JournalEntry) => ReactNode;
 }
 
 export function JournalList({
@@ -20,6 +25,9 @@ export function JournalList({
   onClearFilter,
   onOpenImage,
   onDeleteImage,
+  onStartEdit,
+  editingId,
+  renderEditor,
 }: Props) {
   if (entries.length === 0) {
     // Hai lý do rỗng khác hẳn nhau: chưa ghi gì bao giờ, và lọc quá hẹp. Gộp làm
@@ -47,6 +55,7 @@ export function JournalList({
   return (
     <div className="gf-jn-list">
       {entries.map((e) => {
+        if (e.id === editingId) return <div key={e.id}>{renderEditor(e)}</div>;
         const mood = moodOf(e.mood);
         const flag = flagOf(e.flag);
         const hasFlag = e.flag !== 'none';
@@ -66,6 +75,19 @@ export function JournalList({
                 <span className="gf-jn-vnindex gf-num">VN-Index {formatVnIndex(Number(e.vnindex))}</span>
               )}
               <span className="gf-jn-at gf-num">{formatDateTimeVN(e.noted_at)}</span>
+              {/*
+                Dấu đã sửa nằm CẠNH thời gian gốc, không thay thế nó. Nhật ký ghi cảm
+                nhận TẠI THỜI ĐIỂM ĐÓ; sửa được mà không để dấu vết thì ba tháng sau
+                dễ vô tình viết lại lịch sử sau khi đã biết kết quả thị trường.
+              */}
+              {e.updated_at && (
+                <span className="gf-jn-edited gf-num" title={`Sửa lần cuối ${formatDateTimeVN(e.updated_at)}`}>
+                  ✎ đã sửa lúc {formatDateTimeVN(e.updated_at)}
+                </span>
+              )}
+              <span className="gf-jn-edit" title="Sửa ghi chép" onClick={() => onStartEdit(e.id)}>
+                ✎
+              </span>
               <span className="gf-jn-del" title="Bỏ ghi (giữ vết kiểm toán)" onClick={() => onVoid(e.id)}>
                 ✕
               </span>

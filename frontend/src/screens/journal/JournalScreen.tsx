@@ -4,6 +4,7 @@ import {
   createJournal,
   getJournal,
   getJournalYears,
+  updateJournal,
   voidJournal,
   type Flag,
   type JournalEntry,
@@ -14,6 +15,7 @@ import { parseVNNumber } from '../../lib/format';
 import { Composer, type JournalDraft } from './Composer';
 import { deleteImage, uploadImage } from '../../api/journalImages';
 import { JournalFilters } from './JournalFilters';
+import { JournalEditor, type EditPayload } from './JournalEditor';
 import { Lightbox } from './Lightbox';
 import { ALL_FILTER, isFiltering } from './filterState';
 import { JournalList } from './JournalList';
@@ -67,6 +69,11 @@ export function JournalScreen() {
   const [pendingImages, setPendingImages] = useState<File[]>([]);
   /** Ảnh đang mở toàn màn hình, null = đóng. */
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+
+  /** Ghi chép đang sửa, null = không sửa gì. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   /** Đầu danh sách, để cuộn về sau khi đổi trang. */
   const listRef = useRef<HTMLDivElement>(null);
@@ -226,6 +233,48 @@ export function JournalScreen() {
     }
   };
 
+  /**
+   * Lưu bài đã sửa.
+   *
+   * THỨ TỰ QUAN TRỌNG: xoá ảnh trước, thêm ảnh sau. Bài đang có 5 ảnh mà người dùng
+   * bỏ 2 thêm 2 thì nếu thêm trước, ảnh thứ 6 sẽ bị backend chặn too_many dù kết quả
+   * cuối vẫn đúng 5.
+   */
+  const handleSaveEdit = async (id: string, p: EditPayload) => {
+    setEditSaving(true);
+    setEditError('');
+    try {
+      for (const imgId of p.removed) await deleteImage(imgId);
+
+      const failed: string[] = [];
+      for (const f of p.added) {
+        try {
+          await uploadImage(id, f);
+        } catch (err) {
+          failed.push(`${f.name || 'ảnh dán vào'}: ${errorMessageOf(err)}`);
+        }
+      }
+
+      const vn = p.vnindex.trim();
+      await updateJournal(id, {
+        mood: p.mood,
+        flag: p.flag,
+        vnindex: vn === '' ? null : String(parseVNNumber(vn)),
+        body: p.body.trim(),
+      });
+
+      setEditingId(null);
+      await refresh();
+      if (failed.length) {
+        setFormError(`Đã lưu nội dung, nhưng ${failed.length} ảnh không gửi được — ${failed.join('; ')}`);
+      }
+    } catch (err) {
+      setEditError(errorMessageOf(err));
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleDeleteImage = async (id: string) => {
     setFormError('');
     try {
@@ -318,6 +367,20 @@ export function JournalScreen() {
           onClearFilter={() => applyFilter(ALL_FILTER)}
           onOpenImage={setLightboxId}
           onDeleteImage={handleDeleteImage}
+          onStartEdit={(id) => {
+            setEditError('');
+            setEditingId(id);
+          }}
+          editingId={editingId}
+          renderEditor={(e) => (
+            <JournalEditor
+              entry={e}
+              saving={editSaving}
+              error={editError}
+              onSave={(p) => handleSaveEdit(e.id, p)}
+              onCancel={() => setEditingId(null)}
+            />
+          )}
         />
       </div>
 

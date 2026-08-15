@@ -141,7 +141,9 @@ Giao dịch cổ phiếu (chi tiết + ví dụ response: docs/api-spec.md):
 - POST   fin/rates            body {eff_date, buy_fee, sell_fee, tax}  (upsert theo eff_date)
 
 Nhật ký thị trường:
-- GET    fin/journal[?year=&month=&day=&flag=&mood=&page=&per_page=] -> [{id, mood, flag, vnindex, body, noted_at}]
+- GET    fin/journal[?year=&month=&day=&flag=&mood=&page=&per_page=]
+         -> [{id, mood, flag, vnindex, body, noted_at, updated_at, images[]}]
+         updated_at null = CHƯA TỪNG sửa; UI dựa vào đó để hiện dấu "đã sửa"
          day CHỈ có tác dụng khi có cả year và month; ngoài 1-31 thì bỏ qua
          mood sai giá trị -> bỏ qua, không báo lỗi (giống flag)
          UI gọi mood là "Cảm nhận thị trường", KHÔNG gọi "Cảm xúc"
@@ -156,6 +158,9 @@ Nhật ký thị trường:
 - DELETE fin/journal/images/{id}
          fin/journal trả kèm images:[{id,mime,size_bytes}] cho từng ghi chép
 - POST   fin/journal          body {mood, flag, vnindex|null, body}   (noted_at do backend đóng dấu)
+- PUT    fin/journal/{id}     body {mood, flag, vnindex|null, body}
+         KHÔNG sửa được noted_at — dấu thời gian gốc. Client gửi kèm cũng bị bỏ qua.
+         Người khác -> 403 · bài đã void -> 409 · ghi updated_at mỗi lần sửa
 - DELETE fin/journal/{id}     -> {voided:1}
 
 Checklist mua/bán:

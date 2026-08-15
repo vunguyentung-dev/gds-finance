@@ -700,3 +700,101 @@
 .gf-jn-lb-nav:hover {
   background: rgba(255, 255, 255, 0.26);
 }
+
+/* ---------- sửa ghi chép ---------- */
+
+.gf-jn-edit {
+  cursor: pointer;
+  color: var(--muted2);
+  font-size: 13px;
+  margin-left: auto;
+}
+
+.gf-jn-edit:hover {
+  color: var(--accentInk);
+}
+
+/* gf-jn-del vốn dùng margin-left:auto để đẩy sang phải; giờ nút Sửa giữ vai đó. */
+.gf-jn-card-head .gf-jn-edit + .gf-jn-del {
+  margin-left: 0;
+}
+
+/*
+  Dấu "đã sửa" đứng CẠNH thời gian gốc, cỡ nhỏ hơn và màu nhạt hơn — nó là chú thích
+  cho dấu thời gian, không phải thay thế.
+*/
+.gf-jn-edited {
+  font-size: 10px;
+  color: var(--muted2);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.gf-jn-editing {
+  border-color: var(--accent);
+  /* Viền dày hơn để giữa một danh sách dài vẫn thấy ngay bài nào đang mở sửa. */
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.gf-jn-edit-head {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accentInk);
+  background: var(--accentSoft);
+}
+
+.gf-jn-edit-body {
+  padding: 4px 16px 16px;
+}
+
+.gf-jn-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.gf-jn-edit-cancel {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 12px 20px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.gf-jn-edit-cancel:hover:not(:disabled) {
+  border-color: var(--down);
+  color: var(--down);
+}
+
+.gf-jn-edit-hint {
+  font-size: 12px;
+  color: var(--muted2);
+}
+
+/* Ảnh đánh dấu bỏ: mờ và gạch chéo, nhưng VẪN hiện — còn bấm lại để giữ. */
+.gf-jn-attach-item.is-removed img {
+  opacity: 0.3;
+  filter: grayscale(1);
+}
+
+.gf-jn-attach-item.is-removed {
+  border-color: var(--down);
+}
+
+/* Ảnh mới thêm: viền accent để phân biệt với ảnh đã có sẵn trong bài. */
+.gf-jn-attach-item.is-new {
+  border-color: var(--accent);
+}
+
+.gf-jn-edit-warn {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--down);
+  line-height: 1.5;
+}
