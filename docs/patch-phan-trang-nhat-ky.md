@@ -1,6 +1,10 @@
 # Patch backend — phân trang cho `GET fin/journal`
 
-Bạn tự áp. Chỉ sửa **1 file**: `backend/includes/class-fin-journal.php`, và chỉ **một
+> **ĐÃ ÁP XONG** ngày 2026-08-15, nhánh `feature/phan-trang-nhat-ky-20260815`.
+> Verify trên class thật: 46 OK · 0 LỆCH, với 137 ghi chép test tự tạo rồi dọn sạch.
+> `GDSFIN_VERSION` lên 1.12.0, `GDSFIN_DB_VERSION` giữ 1.9.0. Giữ file làm hồ sơ.
+
+Chỉ sửa **1 file**: `backend/includes/class-fin-journal.php`, và chỉ **một
 hàm**: `index()`.
 
 ## 0. Tóm tắt
