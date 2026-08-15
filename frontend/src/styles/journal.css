@@ -275,3 +275,61 @@
   background: var(--accent);
   cursor: pointer;
 }
+
+/* ---------- chân danh sách: tiến độ + tải thêm ---------- */
+
+/*
+  min-height cố định: khối này đổi giữa nút và dòng "Đã hiển thị tất cả", hai thứ
+  cao khác nhau. Không ghim chiều cao thì lần bấm cuối cùng làm cả trang giật.
+*/
+.gf-jn-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-height: 76px;
+  justify-content: center;
+  padding: 6px 0 2px;
+}
+
+.gf-jn-more-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.gf-jn-more-btn {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 10px 22px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--accentInk);
+  background: var(--panel);
+  cursor: pointer;
+  /* Chữ đổi từ "Tải thêm 20 ghi chép" sang "Đang tải…" — ghim bề rộng tối thiểu
+     để nút không co lại giữa chừng. */
+  min-width: 208px;
+}
+
+.gf-jn-more-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accentSoft);
+}
+
+.gf-jn-more-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.gf-jn-more-done {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted2);
+}
+
+.gf-jn-more-err {
+  font-size: 12px;
+  color: var(--down);
+}

@@ -27,13 +27,21 @@ export interface JournalFilter {
   flag: string;
 }
 
-export function getJournal(filter: JournalFilter) {
+/** Khớp PER_PAGE_DEFAULT của backend. Đổi ở đây thì đổi cả docs/patch-phan-trang-nhat-ky.md. */
+export const JOURNAL_PER_PAGE = 20;
+
+/**
+ * Một trang nhật ký. Bộ lọc áp TRƯỚC khi phân trang, nên total là tổng của phần
+ * đã lọc chứ không phải tổng toàn bộ sổ.
+ */
+export function getJournal(filter: JournalFilter, page = 1, perPage = JOURNAL_PER_PAGE) {
   const qs = new URLSearchParams();
   if (filter.year !== 'all') qs.set('year', filter.year);
   if (filter.month !== 'all') qs.set('month', filter.month);
   if (filter.flag !== 'all') qs.set('flag', filter.flag);
-  const q = qs.toString();
-  return apiClient.get<JournalEntry[]>(`fin/journal${q ? `?${q}` : ''}`);
+  qs.set('page', String(page));
+  qs.set('per_page', String(perPage));
+  return apiClient.getPaged<JournalEntry>(`fin/journal?${qs.toString()}`);
 }
 
 export function getJournalYears() {
