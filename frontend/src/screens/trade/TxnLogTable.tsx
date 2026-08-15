@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { Pager } from '../../components/Pager';
+import { clampPage } from '../../lib/pagerMath';
 import type { StockTxn } from '../../api/stock';
 import { formatDateVN, toDong, toQty } from '../../lib/format';
 import { SortHeader } from './SortHeader';
@@ -9,6 +11,8 @@ interface Props {
   onVoid: (id: string) => void;
 }
 
+const PER_PAGE = 20;
+
 /**
  * Bảng "Lịch sử giao dịch" — net_price/net_value do backend tính sẵn.
  *
@@ -17,13 +21,24 @@ interface Props {
  */
 export function TxnLogTable({ rows, onVoid }: Props) {
   const [sort, setSort] = useState<SortState | null>(null);
+  const [page, setPage] = useState(1);
 
-  const shown = useMemo(
+  // Sắp trên TOÀN BỘ rồi mới cắt trang — sắp trong phạm vi trang thì "sắp theo Giá"
+  // chỉ sắp 20 dòng đang xem. Bảng này backend đã trả mới nhất trước nên mặc định
+  // không cần đảo, khác bảng T+2.
+  const ordered = useMemo(
     () => (sort === null ? rows : sortRows(rows, sort, TXN_VALUE[sort.key])),
     [rows, sort],
   );
 
-  const handleSort = (key: string) => setSort((cur) => nextSort(cur, key));
+  const totalPages = Math.max(1, Math.ceil(ordered.length / PER_PAGE));
+  const safePage = clampPage(page, totalPages);
+  const shown = ordered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+
+  const handleSort = (key: string) => {
+    setSort((cur) => nextSort(cur, key));
+    setPage(1);
+  };
 
   return (
     <div className="gf-trade-table-wrap">
@@ -75,6 +90,14 @@ export function TxnLogTable({ rows, onVoid }: Props) {
           </tbody>
         </table>
       )}
+
+      <Pager
+        page={safePage}
+        perPage={PER_PAGE}
+        total={ordered.length}
+        unit="lệnh"
+        onGoTo={setPage}
+      />
     </div>
   );
 }

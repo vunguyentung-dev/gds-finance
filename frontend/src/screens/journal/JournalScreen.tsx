@@ -20,7 +20,7 @@ import { Lightbox } from './Lightbox';
 import { ALL_FILTER, isFiltering } from './filterState';
 import { JournalList } from './JournalList';
 import { Pagination } from './Pagination';
-import { clampPage } from './pagerMath';
+import { clampPage } from '../../lib/pagerMath';
 import '../../styles/journal.css';
 
 type ScreenState = 'loading' | 'ready' | 'error' | 'forbidden';
