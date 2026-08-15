@@ -49,3 +49,17 @@ export const FLAG_FILTER_OPTIONS = [
   { value: 'all', label: 'Tất cả cờ' },
   ...flags.filter((f) => f.id !== 'none').map((f) => ({ value: f.id, label: `${f.icon} ${f.label}` })),
 ];
+
+/**
+ * Bộ lọc cảm nhận thị trường. Trong DB cột tên là `mood`, nhưng trên giao diện
+ * LUÔN gọi là "Cảm nhận thị trường" — đúng thiết kế gốc. Không dùng chữ "Cảm xúc".
+ */
+export const MOOD_FILTER_OPTIONS = [
+  { value: 'all', label: 'Tất cả cảm nhận' },
+  ...moods.map((m) => ({ value: m.id, label: `${m.icon} ${m.label}` })),
+];
+
+/** Số ngày của tháng, tính đúng cả năm nhuận. month theo lối người đọc: 1-12. */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}

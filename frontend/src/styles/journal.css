@@ -160,9 +160,13 @@
   flex-wrap: wrap;
 }
 
+/* Năm ô lọc + số đếm + nút xoá: phải cho xuống dòng, không thì tràn ra ngoài thẻ. */
 .gf-jn-filters {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  justify-content: flex-end;
 }
 
 .gf-jn-filters select {
@@ -418,4 +422,61 @@
 .gf-jn-pager-jump button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* ---------- bộ lọc mở rộng ---------- */
+
+.gf-jn-filter-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gf-jn-filter-count b {
+  color: var(--accentInk);
+}
+
+.gf-jn-filter-clear {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--down);
+  background: var(--panel);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gf-jn-filter-clear:hover {
+  border-color: var(--down);
+  background: var(--downSoft);
+}
+
+/* Ô ngày khi chưa chọn năm+tháng: mờ đi để thấy ngay là chưa dùng được. */
+.gf-jn-filters select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gf-jn-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+
+.gf-jn-empty-btn {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--down);
+  background: var(--panel);
+  cursor: pointer;
 }
