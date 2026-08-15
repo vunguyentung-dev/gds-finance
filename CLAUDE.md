@@ -273,4 +273,9 @@ KHÔNG nâng GDSFIN_DB_VERSION — cột mood đã có sẵn, không thêm cột
 - Domain: https://stoic-cohen.113-52-35-14.plesk.page
 - Hosting: Plesk 18, PHP 8.3, MariaDB, KHÔNG có SSH
 - Prefix bảng: ypNAa0LE_ (khác local là wp_)
-- Deploy: ./infra/release.sh trên Mac → Plesk → Git → Pull now → mở trang 1 lần cho dbDelta chạy
+- Deploy: ./infra/release.sh trên Mac → Plesk → Git → Pull now → **Deploy now** →
+  mở trang 1 lần nếu đợt đó có nâng GDSFIN_DB_VERSION (chỉ Pull thôi thì file
+  không sang thư mục web)
+- Schema đã đồng bộ: gdsfin_db_version = 1.9.0, cột entry_type = varchar(10)
+  (xác nhận 2026-08-15). Nhập khoản Đầu tư trên production an toàn — VIỆC NÀY ĐÃ
+  XONG, không cần kiểm hay nhắc lại.
