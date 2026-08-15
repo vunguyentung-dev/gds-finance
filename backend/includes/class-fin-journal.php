@@ -65,6 +65,23 @@ class GDSFIN_Journal {
         $flag = (string) $req->get_param('flag');
         if ($flag !== '' && in_array($flag, self::FLAGS, true)) { $where .= " AND flag = %s"; $args[] = $flag; }
 
+        // Ngày chỉ có nghĩa khi đã chốt CẢ năm lẫn tháng. "Ngày 15" mà không nói
+        // tháng nào thì khớp ngày 15 của mọi tháng mọi năm — gần như chắc chắn không
+        // phải ý người dùng, nên bỏ qua thay vì lọc ra một tập vô nghĩa.
+        $day = absint($req->get_param('day'));
+        if ($day >= 1 && $day <= 31 && $y && $m) {
+            $where .= " AND DAY(noted_at) = %d";
+            $args[] = $day;
+        }
+
+        // Sai giá trị thì BỎ QUA, không báo lỗi — giống hệt cách flag đang xử lý.
+        // Một tham số lọc rác không nên làm hỏng cả yêu cầu.
+        $mood = (string) $req->get_param('mood');
+        if ($mood !== '' && in_array($mood, self::MOODS, true)) {
+            $where .= " AND mood = %s";
+            $args[] = $mood;
+        }
+
         // (int) chứ KHÔNG phải absint(): absint() lấy TRỊ TUYỆT ĐỐI, nên page=-5 sẽ
         // thành trang 5 và per_page=-3 thành 3 dòng — âm thầm sai chứ không báo lỗi.
         // (int) cho -5 -> -5, 'abc' -> 0, '2.9' -> 2; tất cả rơi đúng vào nhánh dưới.
@@ -106,12 +123,28 @@ class GDSFIN_Journal {
 
     public static function years(WP_REST_Request $req) {
         global $wpdb;
-        $rows = $wpdb->get_col($wpdb->prepare(
-            "SELECT DISTINCT YEAR(noted_at) y FROM " . self::table() . "
-              WHERE user_id = %d AND status = 'posted' ORDER BY y DESC",
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT DISTINCT YEAR(noted_at) y, MONTH(noted_at) m
+               FROM " . self::table() . "
+              WHERE user_id = %d AND status = 'posted'
+              ORDER BY y DESC, m DESC",
             get_current_user_id()
-        ));
-        return rest_ensure_response(['years' => array_map('intval', $rows ?: [])]);
+        ), ARRAY_A) ?: [];
+
+        $years  = [];
+        $months = [];
+        foreach ($rows as $r) {
+            $y = (int) $r['y'];
+            if (!in_array($y, $years, true)) { $years[] = $y; }
+            $months[$y][] = (int) $r['m'];
+        }
+
+        // (object) để bảng rỗng ra {} chứ không ra [] — client đọc theo khoá năm,
+        // nhận mảng rỗng thì phải viết thêm nhánh xử lý riêng cho đúng một ca.
+        return rest_ensure_response([
+            'years'  => $years,
+            'months' => (object) $months,
+        ]);
     }
 
     public static function store(WP_REST_Request $req) {

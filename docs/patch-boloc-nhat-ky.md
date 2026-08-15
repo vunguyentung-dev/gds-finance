@@ -1,5 +1,9 @@
 # Patch backend — thêm bộ lọc Ngày và Cảm nhận thị trường cho Nhật ký
 
+> **ĐÃ ÁP XONG** ngày 2026-08-15, nhánh `feature/ap-boloc-nhat-ky-20260815`.
+> Verify trên class thật: 52 OK · 0 LỆCH. `GDSFIN_VERSION` lên 1.14.0,
+> `GDSFIN_DB_VERSION` giữ 1.9.0. Giữ file làm hồ sơ thay đổi.
+
 Bạn tự áp. Chỉ sửa **1 file**: `backend/includes/class-fin-journal.php`, hai hàm
 `index()` và `years()`.
 
