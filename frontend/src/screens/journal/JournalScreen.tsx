@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import {
   createJournal,
@@ -14,7 +14,8 @@ import { parseVNNumber } from '../../lib/format';
 import { FLAG_FILTER_OPTIONS, MONTH_OPTIONS } from './constants';
 import { Composer, type JournalDraft } from './Composer';
 import { JournalList } from './JournalList';
-import { LoadMore } from './LoadMore';
+import { Pagination } from './Pagination';
+import { clampPage } from './pagerMath';
 import '../../styles/journal.css';
 
 type ScreenState = 'loading' | 'ready' | 'error' | 'forbidden';
@@ -37,15 +38,13 @@ export function JournalScreen() {
   const [years, setYears] = useState<number[]>([]);
   const [filter, setFilter] = useState<JournalFilter>(ALL_FILTER);
 
-  /**
-   * Trang CAO NHẤT đã tải, không phải "trang đang xem": danh sách nối thêm chứ
-   * không thay trang, nên lúc nào cũng đang bày trang 1..page.
-   */
+  /** Trang ĐANG XEM. Bấm số trang là thay cả danh sách, không nối thêm. */
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [paged, setPaged] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [moreError, setMoreError] = useState('');
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState('');
 
   const [draft, setDraft] = useState<JournalDraft>({
     mood: 'neutral',
@@ -56,12 +55,16 @@ export function JournalScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
+  /** Đầu danh sách, để cuộn về sau khi đổi trang. */
+  const listRef = useRef<HTMLDivElement>(null);
+
   const load = useCallback((ignore: { current: boolean }, f: JournalFilter) => {
     Promise.all([getJournal(f, 1), getJournalYears()]).then(
       ([res, ys]) => {
         if (ignore.current) return;
         setEntries(res.items);
         setTotal(res.total);
+        setTotalPages(res.totalPages);
         setPaged(res.paged);
         setPage(1);
         setYears(ys.years);
@@ -87,63 +90,69 @@ export function JournalScreen() {
     };
   }, [load]);
 
+  /** Nạp một trang cụ thể, thay toàn bộ danh sách. */
+  const fetchPage = useCallback(
+    async (f: JournalFilter, want: number) => {
+      setPageLoading(true);
+      setPageError('');
+      try {
+        const res = await getJournal(f, want);
+        setEntries(res.items);
+        setTotal(res.total);
+        setTotalPages(res.totalPages);
+        setPaged(res.paged);
+        setPage(want);
+        return res;
+      } catch (err) {
+        setPageError(errorMessageOf(err));
+        return null;
+      } finally {
+        setPageLoading(false);
+      }
+    },
+    [],
+  );
+
   /** Lọc ở phía server để không phải tự cắt dữ liệu ở client. Đổi lọc = về trang 1. */
   const applyFilter = async (next: JournalFilter) => {
     setFilter(next);
     setFormError('');
-    setMoreError('');
-    try {
-      const res = await getJournal(next, 1);
-      setEntries(res.items);
-      setTotal(res.total);
-      setPaged(res.paged);
-      setPage(1);
-    } catch (err) {
-      setFormError(errorMessageOf(err));
-    }
+    await fetchPage(next, 1);
   };
 
-  const handleLoadMore = async () => {
-    setLoadingMore(true);
-    setMoreError('');
-    try {
-      const next = page + 1;
-      const res = await getJournal(filter, next);
-      // Nối, không thay: phần người dùng đang đọc phải đứng yên.
-      setEntries((cur) => [...cur, ...res.items]);
-      setTotal(res.total);
-      setPage(next);
-    } catch (err) {
-      setMoreError(errorMessageOf(err));
-    } finally {
-      setLoadingMore(false);
-    }
+  const handleGoTo = async (want: number) => {
+    const target = clampPage(want, totalPages);
+    if (target === page) return;
+    await fetchPage(filter, target);
+    // Đổi trang xong mà mắt vẫn ở thanh số trang dưới cùng thì không thấy nội dung
+    // mới. Kéo về đầu danh sách, không kéo lên đầu màn (ô soạn thảo không liên quan).
+    listRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
 
   /**
-   * Nạp lại ĐÚNG phần đang bày (trang 1..page), không phải chỉ trang 1.
+   * Nạp lại TRANG HIỆN TẠI sau khi thêm/xoá.
    *
-   * Thêm hoặc xoá một ghi chép làm mọi mục phía sau dịch chỗ. Chỉ nạp lại trang 1 thì
-   * các trang đã tải phía dưới thành số liệu cũ và sẽ có mục lặp hoặc mất; giữ nguyên
-   * không nạp lại thì mục vừa xoá vẫn nằm đó. Nạp lại cả dải là cách duy nhất đúng.
+   * Xoá mục cuối cùng của trang cuối có thể làm trang đang đứng vượt quá số trang mới
+   * — khi đó phải lùi về trang cuối còn hợp lệ, không để người dùng nhìn một trang
+   * rỗng mà tưởng mất sạch dữ liệu.
    */
-  const refresh = useCallback(async () => {
-    const pages = Array.from({ length: page }, (_, i) => i + 1);
-    const [results, ys] = await Promise.all([
-      Promise.all(pages.map((p) => getJournal(filter, p))),
-      getJournalYears(),
-    ]);
-    const merged = results.flatMap((r) => r.items);
-    const last = results[results.length - 1];
+  const refresh = useCallback(
+    async (goFirst = false) => {
+      const want = goFirst ? 1 : page;
+      const res = await getJournal(filter, want);
+      const fixed = clampPage(want, res.totalPages);
 
-    setEntries(merged);
-    setTotal(last.total);
-    setPaged(last.paged);
-    // Xoá nhiều đến mức hụt cả một trang thì lùi page cho khớp, không để nó treo ở
-    // số cũ rồi lần Tải thêm sau nhảy cóc mất một trang.
-    if (merged.length === 0 && page > 1) setPage(1);
-    setYears(ys.years);
-  }, [filter, page]);
+      const final = fixed === want ? res : await getJournal(filter, fixed);
+      setEntries(final.items);
+      setTotal(final.total);
+      setTotalPages(final.totalPages);
+      setPaged(final.paged);
+      setPage(fixed);
+
+      setYears((await getJournalYears()).years);
+    },
+    [filter, page],
+  );
 
   const handleSubmit = async () => {
     const body = draft.body.trim();
@@ -163,7 +172,9 @@ export function JournalScreen() {
         body,
       });
       setDraft((d) => ({ ...d, vnindex: '', body: '' }));
-      await refresh();
+      // Ghi chép mới luôn nằm ĐẦU danh sách, nên nhảy về trang 1 để người dùng thấy
+      // ngay thứ vừa viết. Đứng lại trang 5 thì bấm Lưu xong màn hình không đổi gì.
+      await refresh(true);
     } catch (err) {
       setFormError(errorMessageOf(err));
     } finally {
@@ -262,15 +273,18 @@ export function JournalScreen() {
         </div>
       </div>
 
-      <JournalList entries={entries} onVoid={handleVoid} />
+      <div ref={listRef}>
+        <JournalList entries={entries} onVoid={handleVoid} />
+      </div>
 
-      <LoadMore
-        shown={entries.length}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
         total={total}
         paged={paged}
-        loading={loadingMore}
-        error={moreError}
-        onLoadMore={handleLoadMore}
+        loading={pageLoading}
+        error={pageError}
+        onGoTo={handleGoTo}
       />
     </div>
   );
