@@ -14,6 +14,7 @@ import { parseVNNumber } from '../../lib/format';
 import { FLAG_FILTER_OPTIONS, MONTH_OPTIONS } from './constants';
 import { Composer, type JournalDraft } from './Composer';
 import { JournalList } from './JournalList';
+import { LoadMore } from './LoadMore';
 import '../../styles/journal.css';
 
 type ScreenState = 'loading' | 'ready' | 'error' | 'forbidden';
@@ -36,6 +37,16 @@ export function JournalScreen() {
   const [years, setYears] = useState<number[]>([]);
   const [filter, setFilter] = useState<JournalFilter>(ALL_FILTER);
 
+  /**
+   * Trang CAO NHẤT đã tải, không phải "trang đang xem": danh sách nối thêm chứ
+   * không thay trang, nên lúc nào cũng đang bày trang 1..page.
+   */
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [paged, setPaged] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState('');
+
   const [draft, setDraft] = useState<JournalDraft>({
     mood: 'neutral',
     flag: 'none',
@@ -46,10 +57,13 @@ export function JournalScreen() {
   const [formError, setFormError] = useState('');
 
   const load = useCallback((ignore: { current: boolean }, f: JournalFilter) => {
-    Promise.all([getJournal(f), getJournalYears()]).then(
-      ([list, ys]) => {
+    Promise.all([getJournal(f, 1), getJournalYears()]).then(
+      ([res, ys]) => {
         if (ignore.current) return;
-        setEntries(list);
+        setEntries(res.items);
+        setTotal(res.total);
+        setPaged(res.paged);
+        setPage(1);
         setYears(ys.years);
         setState('ready');
       },
@@ -73,22 +87,63 @@ export function JournalScreen() {
     };
   }, [load]);
 
-  /** Lọc ở phía server để không phải tự cắt dữ liệu ở client. */
+  /** Lọc ở phía server để không phải tự cắt dữ liệu ở client. Đổi lọc = về trang 1. */
   const applyFilter = async (next: JournalFilter) => {
     setFilter(next);
     setFormError('');
+    setMoreError('');
     try {
-      setEntries(await getJournal(next));
+      const res = await getJournal(next, 1);
+      setEntries(res.items);
+      setTotal(res.total);
+      setPaged(res.paged);
+      setPage(1);
     } catch (err) {
       setFormError(errorMessageOf(err));
     }
   };
 
+  const handleLoadMore = async () => {
+    setLoadingMore(true);
+    setMoreError('');
+    try {
+      const next = page + 1;
+      const res = await getJournal(filter, next);
+      // Nối, không thay: phần người dùng đang đọc phải đứng yên.
+      setEntries((cur) => [...cur, ...res.items]);
+      setTotal(res.total);
+      setPage(next);
+    } catch (err) {
+      setMoreError(errorMessageOf(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  /**
+   * Nạp lại ĐÚNG phần đang bày (trang 1..page), không phải chỉ trang 1.
+   *
+   * Thêm hoặc xoá một ghi chép làm mọi mục phía sau dịch chỗ. Chỉ nạp lại trang 1 thì
+   * các trang đã tải phía dưới thành số liệu cũ và sẽ có mục lặp hoặc mất; giữ nguyên
+   * không nạp lại thì mục vừa xoá vẫn nằm đó. Nạp lại cả dải là cách duy nhất đúng.
+   */
   const refresh = useCallback(async () => {
-    const [list, ys] = await Promise.all([getJournal(filter), getJournalYears()]);
-    setEntries(list);
+    const pages = Array.from({ length: page }, (_, i) => i + 1);
+    const [results, ys] = await Promise.all([
+      Promise.all(pages.map((p) => getJournal(filter, p))),
+      getJournalYears(),
+    ]);
+    const merged = results.flatMap((r) => r.items);
+    const last = results[results.length - 1];
+
+    setEntries(merged);
+    setTotal(last.total);
+    setPaged(last.paged);
+    // Xoá nhiều đến mức hụt cả một trang thì lùi page cho khớp, không để nó treo ở
+    // số cũ rồi lần Tải thêm sau nhảy cóc mất một trang.
+    if (merged.length === 0 && page > 1) setPage(1);
     setYears(ys.years);
-  }, [filter]);
+  }, [filter, page]);
 
   const handleSubmit = async () => {
     const body = draft.body.trim();
@@ -208,6 +263,15 @@ export function JournalScreen() {
       </div>
 
       <JournalList entries={entries} onVoid={handleVoid} />
+
+      <LoadMore
+        shown={entries.length}
+        total={total}
+        paged={paged}
+        loading={loadingMore}
+        error={moreError}
+        onLoadMore={handleLoadMore}
+      />
     </div>
   );
 }

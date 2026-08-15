@@ -59,8 +59,55 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Một trang dữ liệu + tổng số, đọc từ header chuẩn WordPress. */
+export interface PagedResult<T> {
+  items: T[];
+  total: number;
+  totalPages: number;
+  /**
+   * false = phản hồi KHÔNG có X-WP-Total, tức endpoint chưa hỗ trợ phân trang.
+   * Client phải phân biệt "hết dữ liệu" với "không biết còn bao nhiêu" — đoán bừa
+   * thì hoặc giấu mất nút Tải thêm, hoặc hiện tổng số sai.
+   */
+  paged: boolean;
+}
+
+async function requestPaged<T>(path: string): Promise<PagedResult<T>> {
+  const { restUrl, nonce } = getConfig();
+  const res = await fetch(`${restUrl}${path}`, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
+  });
+
+  if (!res.ok) {
+    const body: unknown = await res.json().catch(() => null);
+    const message =
+      body && typeof body === 'object' && 'message' in body && typeof body.message === 'string'
+        ? body.message
+        : res.statusText;
+    throw new ApiError(res.status, message);
+  }
+
+  const items = (await res.json()) as T[];
+  const rawTotal = res.headers.get('X-WP-Total');
+  const rawPages = res.headers.get('X-WP-TotalPages');
+
+  if (rawTotal === null) {
+    // Backend chưa áp patch: trả hết trong một lượt. Coi như đúng một trang.
+    return { items, total: items.length, totalPages: 1, paged: false };
+  }
+
+  return {
+    items,
+    total: Number(rawTotal),
+    totalPages: rawPages === null ? 1 : Number(rawPages),
+    paged: true,
+  };
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
+  getPaged: <T>(path: string) => requestPaged<T>(path),
   post: <T>(path: string, body: unknown) => request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),

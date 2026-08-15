@@ -126,7 +126,12 @@ Giao dịch cổ phiếu (chi tiết + ví dụ response: docs/api-spec.md):
 - POST   fin/rates            body {eff_date, buy_fee, sell_fee, tax}  (upsert theo eff_date)
 
 Nhật ký thị trường:
-- GET    fin/journal[?year=&month=&flag=] -> [{id, mood, flag, vnindex, body, noted_at}]
+- GET    fin/journal[?year=&month=&flag=&page=&per_page=] -> [{id, mood, flag, vnindex, body, noted_at}]
+         page mặc định 1 · per_page mặc định 20, TRẦN 50 (vượt thì kẹp)
+         trả kèm header X-WP-Total và X-WP-TotalPages (chuẩn WordPress)
+         lọc áp TRƯỚC phân trang, nên X-WP-Total là tổng ĐÃ LỌC
+         KHÔNG có bản ghi nào -> X-WP-TotalPages = 0, không phải 1
+         gọi không tham số giờ trả 20 dòng (trước đây tối đa 1000)
 - GET    fin/journal/years    -> {years:[...]}
 - POST   fin/journal          body {mood, flag, vnindex|null, body}   (noted_at do backend đóng dấu)
 - DELETE fin/journal/{id}     -> {voided:1}
@@ -248,6 +253,12 @@ Thứ tự bắt buộc: sửa class-fin-personal.php TRƯỚC, nâng version SA
 Sau khi áp: chạy SHOW COLUMNS xác nhận varchar(10), kiểm gdsfin_db_version = 1.9.0,
 in bảng đối chiếu kỳ vọng vs thực tế trên bảng THẬT.
 KHÔNG được làm đổi số fin/summary với dữ liệu cũ (10 bản ghi hiện có).
+
+## Nới phạm vi tạm thời — chỉ để áp patch phân trang nhật ký
+Được sửa backend/ CHỈ để áp docs/patch-phan-trang-nhat-ky.md, trên nhánh riêng.
+Chỉ đụng class-fin-journal.php (hàm index) + hằng GDSFIN_VERSION.
+KHÔNG nâng GDSFIN_DB_VERSION — patch này không đổi cấu trúc bảng nào.
+Đã áp xong, verify 46 OK · 0 LỆCH trên bảng thật với 137 ghi chép test đã dọn.
 
 ## Môi trường production
 - Domain: https://stoic-cohen.113-52-35-14.plesk.page

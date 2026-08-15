@@ -682,6 +682,31 @@ không gửi:
 Bộ lọc năm/tháng nên trả kèm danh sách năm có dữ liệu để client dựng dropdown:
 `GET fin/journal/years → { "years":[2026,2025] }`.
 
+**Phân trang** (thêm sau, xem `docs/patch-phan-trang-nhat-ky.md`):
+
+```
+GET fin/journal?page=2&per_page=20
+→ header  X-WP-Total: 137
+          X-WP-TotalPages: 7
+```
+
+`page` mặc định 1, `per_page` mặc định 20 và **trần cứng 50** — vượt thì kẹp về 50.
+Ép kiểu bằng `(int)` chứ **không** `absint()`: `absint(-5)` ra 5, nên `page=-5` sẽ âm
+thầm nhảy sang trang 5 thay vì về trang 1.
+
+Bộ lọc năm/tháng/cờ áp **TRƯỚC** phân trang, nên `X-WP-Total` là tổng của phần **đã
+lọc**, không phải tổng cả sổ. Đếm và lấy dữ liệu phải dùng chung một mệnh đề `WHERE`.
+
+Không có bản ghi nào khớp thì `X-WP-TotalPages` là **0**, không phải 1.
+
+Gọi không tham số giờ trả **20** dòng thay vì tối đa 1000 như bản đầu — đổi hành vi
+có chủ ý, không phải hồi quy.
+
+UI dùng nút **Tải thêm** chứ không phải thanh phân trang: ô soạn ghi chép nằm ngay
+trên danh sách nên mục mới chèn vào **đầu** liên tục, khiến "trang 2" theo offset đổi
+nghĩa sau mỗi lần ghi. Xoá/thêm giữa chừng thì client nạp lại **cả dải trang 1..N**
+đang bày, không phải chỉ trang 1.
+
 ### Checklist mua/bán
 
 ```
