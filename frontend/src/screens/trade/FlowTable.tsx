@@ -1,5 +1,15 @@
+import { useMemo, useState } from 'react';
 import type { FlowRow, SummaryFooter } from '../../api/stock';
 import { formatDateVN, signedDong, toDong, toQty } from '../../lib/format';
+import { SortHeader } from './SortHeader';
+import {
+  FLOW_LABELS,
+  FLOW_VALUE,
+  keepsRunningOrder,
+  nextSort,
+  sortRows,
+  type SortState,
+} from './sortRows';
 
 interface Props {
   rows: FlowRow[];
@@ -25,6 +35,19 @@ export function FlowTable({ rows, footer, openLotsId, onToggleLots }: Props) {
   const cumPl = Number(footer.cum_pl);
   const diff = Number(footer.engines_diff);
 
+  const [sort, setSort] = useState<SortState | null>(null);
+
+  const shown = useMemo(
+    () => (sort === null ? rows : sortRows(rows, sort, FLOW_VALUE[sort.key])),
+    [rows, sort],
+  );
+
+  // Hai cột cộng dồn chỉ đọc được khi thứ tự bày ra còn giữ trình tự thời gian.
+  // Xem giải thích đầy đủ ở keepsRunningOrder().
+  const showRunning = useMemo(() => keepsRunningOrder(shown, rows), [shown, rows]);
+
+  const handleSort = (key: string) => setSort((cur) => nextSort(cur, key));
+
   return (
     <div className="gf-trade-table-wrap">
       <div className="gf-trade-table-head">
@@ -39,24 +62,38 @@ export function FlowTable({ rows, footer, openLotsId, onToggleLots }: Props) {
         <div className="gf-trade-empty">Chưa có giao dịch nào.</div>
       ) : (
         <>
+          {!showRunning && (
+            <div className="gf-trade-sortwarn">
+              <span>⚠</span>
+              <div>
+                Đang sắp theo <b>{sort === null ? '' : FLOW_LABELS[sort.key]}</b>, nên hai cột{' '}
+                <b>Lũy kế</b> và <b>Còn nắm</b> tạm ẩn. Chúng là số cộng dồn theo trình tự
+                thời gian — bày ra ở thứ tự khác thì lũy kế của một hàng đã gộp cả những
+                hàng đang nằm dưới nó, đọc thành số vô nghĩa. Bấm{' '}
+                <b>{sort === null ? '' : FLOW_LABELS[sort.key]}</b> thêm một lần nữa để bỏ sắp
+                xếp và lấy lại hai cột.
+              </div>
+            </div>
+          )}
+
           <table className="gf-trade-table gf-num">
             <thead>
               <tr>
-                <th className="l">Ngày</th>
-                <th className="l">Mã</th>
-                <th className="l">Loại</th>
-                <th>KL</th>
-                <th>Giá</th>
+                <SortHeader label="Ngày" sortKey="date" sort={sort} onSort={handleSort} align="l" />
+                <SortHeader label="Mã" sortKey="sym" sort={sort} onSort={handleSort} align="l" />
+                <SortHeader label="Loại" sortKey="type" sort={sort} onSort={handleSort} align="l" />
+                <SortHeader label="KL" sortKey="qty" sort={sort} onSort={handleSort} />
+                <SortHeader label="Giá" sortKey="price" sort={sort} onSort={handleSort} />
                 <th className="l">Trạng thái T+2</th>
                 <th>Dòng tiền ròng</th>
-                <th>Lãi/lỗ dòng</th>
-                <th>Lũy kế</th>
-                <th>Còn nắm</th>
+                <SortHeader label="Lãi/lỗ dòng" sortKey="pl" sort={sort} onSort={handleSort} />
+                {showRunning && <th>Lũy kế</th>}
+                {showRunning && <th>Còn nắm</th>}
                 <th />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {shown.map((r) => {
                 const isBuy = r.txn_type === 'buy';
                 const t2 = t2Label(r);
                 const cash = Number(r.cash);
@@ -83,10 +120,12 @@ export function FlowTable({ rows, footer, openLotsId, onToggleLots }: Props) {
                     >
                       {rowPl === null ? '—' : signedDong(rowPl)}
                     </td>
-                    <td className="bold" style={{ color: cum >= 0 ? 'var(--up)' : 'var(--down)' }}>
-                      {signedDong(cum)}
-                    </td>
-                    <td className="muted">{toQty(Number(r.remain))} cp</td>
+                    {showRunning && (
+                      <td className="bold" style={{ color: cum >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                        {signedDong(cum)}
+                      </td>
+                    )}
+                    {showRunning && <td className="muted">{toQty(Number(r.remain))} cp</td>}
                     <td className="gf-trade-lots-cell">
                       {isBuy ? null : (
                         <button
