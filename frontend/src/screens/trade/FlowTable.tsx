@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { Pager } from '../../components/Pager';
+import { clampPage } from '../../lib/pagerMath';
 import type { FlowRow, SummaryFooter } from '../../api/stock';
 import { formatDateVN, signedDong, toDong, toQty } from '../../lib/format';
 import { SortHeader } from './SortHeader';
@@ -29,6 +31,8 @@ function t2Label(r: FlowRow): { text: string; color: string } {
   return { text: '✓ Hàng đã về', color: 'var(--up)' };
 }
 
+const PER_PAGE = 20;
+
 /** Bảng "Diễn tiến giao dịch theo T+2" — số liệu từ engine FIFO. */
 export function FlowTable({ rows, footer, openLotsId, onToggleLots }: Props) {
   const remain = Number(footer.flow_remain);
@@ -36,17 +40,39 @@ export function FlowTable({ rows, footer, openLotsId, onToggleLots }: Props) {
   const diff = Number(footer.engines_diff);
 
   const [sort, setSort] = useState<SortState | null>(null);
+  const [page, setPage] = useState(1);
 
-  const shown = useMemo(
-    () => (sort === null ? rows : sortRows(rows, sort, FLOW_VALUE[sort.key])),
-    [rows, sort],
-  );
+  /*
+   * BA BƯỚC, đúng thứ tự này:
+   *   1. sắp xếp trên TOÀN BỘ dữ liệu
+   *   2. kiểm thứ tự cộng dồn cũng trên TOÀN BỘ
+   *   3. mới cắt lấy một trang
+   *
+   * Sắp trong phạm vi trang sẽ ra kết quả sai — "sắp theo Lãi/lỗ" chỉ sắp 20 dòng
+   * đang xem. Và keepsRunningOrder() so độ dài trước tiên, nên đưa một lát cắt 20
+   * dòng vào đó thì nó luôn trả false và hai cột Lũy kế/Còn nắm biến mất ở MỌI
+   * trang — hỏng mà nhìn vẫn có vẻ bình thường.
+   */
+  const ordered = useMemo(() => {
+    // Mặc định: mới nhất trên đầu. Backend trả theo trình tự thời gian tăng dần,
+    // nên đảo lại. Đảo NGUYÊN vẹn chứ không sắp theo cột ngày: bản đảo hoàn hảo
+    // vẫn giữ được hai cột cộng dồn (cột đơn điệu, chỉ đọc ngược lên).
+    if (sort === null) return [...rows].reverse();
+    return sortRows(rows, sort, FLOW_VALUE[sort.key]);
+  }, [rows, sort]);
 
-  // Hai cột cộng dồn chỉ đọc được khi thứ tự bày ra còn giữ trình tự thời gian.
-  // Xem giải thích đầy đủ ở keepsRunningOrder().
-  const showRunning = useMemo(() => keepsRunningOrder(shown, rows), [shown, rows]);
+  const showRunning = useMemo(() => keepsRunningOrder(ordered, rows), [ordered, rows]);
 
-  const handleSort = (key: string) => setSort((cur) => nextSort(cur, key));
+  const totalPages = Math.max(1, Math.ceil(ordered.length / PER_PAGE));
+  const safePage = clampPage(page, totalPages);
+  const shown = ordered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+
+  // Đổi cột sắp xếp thì về trang 1: giữ nguyên trang 5 sau khi đổi cột là bày ra
+  // một lát cắt chẳng liên quan gì tới thứ người dùng vừa bấm.
+  const handleSort = (key: string) => {
+    setSort((cur) => nextSort(cur, key));
+    setPage(1);
+  };
 
   return (
     <div className="gf-trade-table-wrap">
@@ -143,6 +169,14 @@ export function FlowTable({ rows, footer, openLotsId, onToggleLots }: Props) {
               })}
             </tbody>
           </table>
+
+          <Pager
+            page={safePage}
+            perPage={PER_PAGE}
+            total={ordered.length}
+            unit="lệnh"
+            onGoTo={setPage}
+          />
 
           <div className="gf-trade-foot">
             <div className="gf-trade-foot-label">

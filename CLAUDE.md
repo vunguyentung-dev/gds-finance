@@ -203,6 +203,12 @@ Tổng quan:
   total_asset dùng market_value CHƯA trừ phí.
 
 Lưu ý khi dựng UI Giao dịch: backend đã tính sẵn lãi/lỗ, client KHÔNG tự tính.
+Hai bảng T+2 và Lịch sử phân trang Ở CLIENT (20 dòng/trang) — fin/stock-summary và
+fin/stock-txns trả hết dữ liệu, không cần phân trang phía server.
+Thứ tự bắt buộc: sắp xếp TOÀN BỘ -> kiểm keepsRunningOrder TOÀN BỘ -> mới cắt trang.
+Đưa lát cắt vào keepsRunningOrder thì nó so độ dài và luôn trả false, làm hai cột
+Lũy kế/Còn nắm biến mất ở mọi trang — hỏng mà nhìn vẫn có vẻ bình thường.
+cum_pl do backend tính sẵn cho từng dòng nên phân trang không đụng tới nó.
 footer trả CẢ HAI số — cum_pl (engine FIFO, dùng cho chân bảng timeline) và
 total_realized (engine bình quân, dùng cho thẻ đầu màn) — kèm engines_diverge;
 khi engines_diverge=true PHẢI hiện cảnh báo, không được giấu.

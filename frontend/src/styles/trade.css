@@ -948,3 +948,75 @@
   background: var(--chip);
   color: var(--muted);
 }
+
+/* ---------- thanh phân trang của bảng ---------- */
+
+.gf-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.gf-pager-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.gf-pager-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.gf-pager-btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--fg);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  font-feature-settings: 'tnum';
+  cursor: pointer;
+}
+
+.gf-pager-btn:hover:not(:disabled):not(.on) {
+  border-color: var(--accent);
+  color: var(--accentInk);
+  background: var(--accentSoft);
+}
+
+.gf-pager-btn.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  cursor: default;
+}
+
+.gf-pager-btn.step {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.gf-pager-btn:disabled:not(.on) {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.gf-pager-gap {
+  min-width: 18px;
+  text-align: center;
+  color: var(--muted2);
+  font-size: 12px;
+  user-select: none;
+}

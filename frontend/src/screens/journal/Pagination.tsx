@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { JOURNAL_PER_PAGE } from '../../api/journal';
-import { clampPage, pageItems, pageRange } from './pagerMath';
+import { clampPage, pageItems, pageRange } from '../../lib/pagerMath';
 
 interface Props {
   page: number;
