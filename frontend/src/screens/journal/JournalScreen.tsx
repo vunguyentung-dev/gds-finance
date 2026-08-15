@@ -11,8 +11,9 @@ import {
   type Mood,
 } from '../../api/journal';
 import { parseVNNumber } from '../../lib/format';
-import { FLAG_FILTER_OPTIONS, MONTH_OPTIONS } from './constants';
 import { Composer, type JournalDraft } from './Composer';
+import { JournalFilters } from './JournalFilters';
+import { ALL_FILTER, isFiltering } from './filterState';
 import { JournalList } from './JournalList';
 import { Pagination } from './Pagination';
 import { clampPage } from './pagerMath';
@@ -28,15 +29,20 @@ function errorMessageOf(err: unknown): string {
   return err instanceof Error ? err.message : 'Đã xảy ra lỗi.';
 }
 
-const ALL_FILTER: JournalFilter = { year: 'all', month: 'all', flag: 'all' };
-
 export function JournalScreen() {
   const [state, setState] = useState<ScreenState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
 
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [years, setYears] = useState<number[]>([]);
+  const [monthsByYear, setMonthsByYear] = useState<Record<string, number[]> | undefined>();
   const [filter, setFilter] = useState<JournalFilter>(ALL_FILTER);
+
+  /**
+   * Tổng khi KHÔNG lọc gì, để hiện "12 / 137". Chỉ đổi khi thêm/xoá ghi chép, nên
+   * đổi bộ lọc không cần đọc lại — tiết kiệm một lượt gọi mỗi lần chỉnh dropdown.
+   */
+  const [grandTotal, setGrandTotal] = useState(0);
 
   /** Trang ĐANG XEM. Bấm số trang là thay cả danh sách, không nối thêm. */
   const [page, setPage] = useState(1);
@@ -67,7 +73,10 @@ export function JournalScreen() {
         setTotalPages(res.totalPages);
         setPaged(res.paged);
         setPage(1);
+        // Lần tải đầu chưa lọc gì nên total CHÍNH LÀ tổng toàn bộ.
+        setGrandTotal(res.total);
         setYears(ys.years);
+        setMonthsByYear(ys.months);
         setState('ready');
       },
       (err) => {
@@ -149,7 +158,13 @@ export function JournalScreen() {
       setPaged(final.paged);
       setPage(fixed);
 
-      setYears((await getJournalYears()).years);
+      const ys = await getJournalYears();
+      setYears(ys.years);
+      setMonthsByYear(ys.months);
+
+      // Thêm/xoá làm đổi tổng, mà tổng này không suy ra được từ kết quả đã lọc.
+      // per_page=1: chỉ cần con số ở header, không cần dữ liệu.
+      setGrandTotal((await getJournal(ALL_FILTER, 1, 1)).total);
     },
     [filter, page],
   );
@@ -227,11 +242,6 @@ export function JournalScreen() {
     );
   }
 
-  const yearOptions = [
-    { value: 'all', label: 'Tất cả năm' },
-    ...years.map((y) => ({ value: String(y), label: `Năm ${y}` })),
-  ];
-
   return (
     <div className="gf-jn">
       <Composer
@@ -248,33 +258,23 @@ export function JournalScreen() {
         <div className="gf-jn-title" style={{ marginBottom: 0 }}>
           Nhật ký đã ghi
         </div>
-        <div className="gf-jn-filters">
-          <select value={filter.year} onChange={(e) => applyFilter({ ...filter, year: e.target.value })}>
-            {yearOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select value={filter.month} onChange={(e) => applyFilter({ ...filter, month: e.target.value })}>
-            {MONTH_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select value={filter.flag} onChange={(e) => applyFilter({ ...filter, flag: e.target.value })}>
-            {FLAG_FILTER_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <JournalFilters
+          filter={filter}
+          years={years}
+          monthsByYear={monthsByYear}
+          total={total}
+          grandTotal={grandTotal}
+          onChange={applyFilter}
+        />
       </div>
 
       <div ref={listRef}>
-        <JournalList entries={entries} onVoid={handleVoid} />
+        <JournalList
+          entries={entries}
+          onVoid={handleVoid}
+          filtering={isFiltering(filter)}
+          onClearFilter={() => applyFilter(ALL_FILTER)}
+        />
       </div>
 
       <Pagination

@@ -126,13 +126,16 @@ Giao dịch cổ phiếu (chi tiết + ví dụ response: docs/api-spec.md):
 - POST   fin/rates            body {eff_date, buy_fee, sell_fee, tax}  (upsert theo eff_date)
 
 Nhật ký thị trường:
-- GET    fin/journal[?year=&month=&flag=&page=&per_page=] -> [{id, mood, flag, vnindex, body, noted_at}]
+- GET    fin/journal[?year=&month=&day=&flag=&mood=&page=&per_page=] -> [{id, mood, flag, vnindex, body, noted_at}]
+         day CHỈ có tác dụng khi có cả year và month; ngoài 1-31 thì bỏ qua
+         mood sai giá trị -> bỏ qua, không báo lỗi (giống flag)
+         UI gọi mood là "Cảm nhận thị trường", KHÔNG gọi "Cảm xúc"
          page mặc định 1 · per_page mặc định 20, TRẦN 50 (vượt thì kẹp)
          trả kèm header X-WP-Total và X-WP-TotalPages (chuẩn WordPress)
          lọc áp TRƯỚC phân trang, nên X-WP-Total là tổng ĐÃ LỌC
          KHÔNG có bản ghi nào -> X-WP-TotalPages = 0, không phải 1
          gọi không tham số giờ trả 20 dòng (trước đây tối đa 1000)
-- GET    fin/journal/years    -> {years:[...]}
+- GET    fin/journal/years    -> {years:[...], months:{"2026":[8,7],...}}
 - POST   fin/journal          body {mood, flag, vnindex|null, body}   (noted_at do backend đóng dấu)
 - DELETE fin/journal/{id}     -> {voided:1}
 

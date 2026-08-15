@@ -5,11 +5,33 @@ import { flagOf, moodOf } from './constants';
 interface Props {
   entries: JournalEntry[];
   onVoid: (id: string) => void;
+  /** Có ít nhất một bộ lọc đang bật. */
+  filtering: boolean;
+  onClearFilter: () => void;
 }
 
-export function JournalList({ entries, onVoid }: Props) {
+export function JournalList({ entries, onVoid, filtering, onClearFilter }: Props) {
   if (entries.length === 0) {
-    return <div className="gf-jn-empty">Không có nhật ký nào khớp bộ lọc.</div>;
+    // Hai lý do rỗng khác hẳn nhau: chưa ghi gì bao giờ, và lọc quá hẹp. Gộp làm
+    // một câu thì người vừa lọc sẽ tưởng mất sạch dữ liệu.
+    return (
+      <div className="gf-jn-empty">
+        {filtering ? (
+          <>
+            <div className="gf-jn-empty-title">Không có ghi chép nào khớp bộ lọc</div>
+            <div>Thử bỏ bớt một điều kiện — chẳng hạn nới ngày về “Tất cả ngày”, hoặc đổi cảm nhận thị trường.</div>
+            <button type="button" className="gf-jn-empty-btn" onClick={onClearFilter}>
+              ✕ Xóa bộ lọc
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="gf-jn-empty-title">Chưa có ghi chép nào</div>
+            <div>Ghi lại cảm nhận và nhận định ở khung phía trên để soi lại quyết định về sau.</div>
+          </>
+        )}
+      </div>
+    );
   }
 
   return (

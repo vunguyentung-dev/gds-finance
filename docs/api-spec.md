@@ -675,6 +675,33 @@ không gửi:
 → { "id":"15" }
 ```
 
+**Bộ lọc** (mục này mở rộng ở `docs/patch-boloc-nhat-ky.md`):
+
+```
+GET fin/journal?year=2026&month=8&day=15&mood=fear&flag=warn
+```
+
+Năm điều kiện nối bằng **AND**, áp **TRƯỚC** phân trang, nên `X-WP-Total` là số kết
+quả sau khi lọc.
+
+`day` **chỉ có tác dụng khi đã có cả `year` lẫn `month`**. "Ngày 15" mà không nói
+tháng nào thì khớp ngày 15 của mọi tháng mọi năm — gần như chắc chắn không phải ý
+người dùng, nên backend bỏ qua thay vì lọc ra một tập vô nghĩa. Giá trị ngoài 1–31
+cũng bỏ qua.
+
+`mood` sai giá trị thì **bỏ qua, không báo lỗi** — giống hệt cách `flag` xử lý. Một
+tham số lọc rác không nên làm hỏng cả yêu cầu.
+
+`GET fin/journal/years` trả thêm khoá `months`:
+`{ "years":[2026,2025], "months":{"2026":[8,7],"2025":[11]} }` — để dropdown Tháng
+chỉ bày tháng **thực sự có ghi chép**, thay vì đủ 12 tháng mà phần lớn chọn vào là
+rỗng. Khoá `years` giữ nguyên hình dạng cũ nên client cũ không hỏng.
+
+**Tên gọi trên giao diện**: cột DB là `mood`, nhưng UI **luôn** gọi là "Cảm nhận thị
+trường" — đúng thiết kế gốc. Không dùng chữ "Cảm xúc". Ô Ngày bị khoá cho tới khi
+chọn xong Năm và Tháng cụ thể, và đổi năm/tháng sẽ nhả Ngày về "tất cả" vì lựa chọn
+cũ có thể thành vô nghĩa (ngày 31 rồi chuyển sang tháng 2).
+
 `mood ∈ {greed, up, neutral, down, fear}` (dòng **1308–1313**),
 `flag ∈ {none, warn, lesson, chance, note}` (dòng **1316–1321**).
 `vnindex` nullable — client gửi `null` khi để trống.
